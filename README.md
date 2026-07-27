@@ -71,3 +71,11 @@ Em **Configurações → Carregar dados de exemplo** você popula obras, uma ter
 
 ### Login
 O login agora aceita **e-mail ou usuário**. Padrão inicial: `admin` / `admin` — crie os demais usuários em Configurações → Usuários.
+
+## Novidades v3
+
+- **Cores Amorim Coutinho** no lugar do preto: topbar vermelho, menu claro com destaque vermelho.
+- **Filtros dinâmicos** (filtram ao digitar) em Obras, Terceirizadas, Contratos (busca + obra + status da documentação), Períodos, e filtro por **obra** nos Boletins.
+- **Boletim de Medição** deixa claro que os documentos periódicos **anexados e validados no período** entram automaticamente; mostra quem inseriu e o status do período.
+- Botão **"Aprovar todos (empresa)"** na tela de Documentos do Contrato — marca a documentação da empresa como **Completa** mesmo com pendências.
+- Colaborador só é **liberado para entrada** quando todos os seus documentos estão anexados, válidos e **aprovados** pelo setor responsável (SESMT/DP).

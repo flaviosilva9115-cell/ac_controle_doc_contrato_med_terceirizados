@@ -68,8 +68,11 @@ window.Views = (function(){
         <button class="icon-act edit" data-edit="${o.id}" title="Editar">✎</button>
         <button class="icon-act del" data-del="${o.id}" title="Excluir">🗑</button></td></tr>`);
     return UI.pageHead('🏗️','Obras','<button class="btn btn-dark" id="add">+ Nova</button>')+
-      `<div class="card"><div class="card-title">Obras cadastradas</div>
-      ${UI.table(['Código','Nome','Cidade','Ações'], rows)}</div>`;
+      `<div class="card"><div class="card-title" style="justify-content:space-between">
+        <span>Obras cadastradas</span>
+        <input class="flt" data-filter-tbl="#tbl-obras" placeholder="🔎 Filtrar por nome, código ou cidade...">
+      </div>
+      ${UI.table(['Código','Nome','Cidade','Ações'], rows, 'tbl-obras')}</div>`;
   }
   after.obras=()=>{
     const bind=()=>{
@@ -105,8 +108,11 @@ window.Views = (function(){
         <button class="icon-act edit" data-edit="${f.id}">✎</button>
         <button class="icon-act del" data-del="${f.id}">🗑</button></td></tr>`);
     return UI.pageHead('🏢','Terceirizadas','<button class="btn btn-dark" id="add">+ Nova</button>')+
-      `<div class="card"><div class="card-title">Empresas terceirizadas</div>
-      ${UI.table(['CNPJ','Razão Social','Nome Fantasia','Situação','Ações'], rows)}</div>`;
+      `<div class="card"><div class="card-title" style="justify-content:space-between">
+        <span>Empresas terceirizadas</span>
+        <input class="flt" data-filter-tbl="#tbl-terc" placeholder="🔎 Filtrar por CNPJ, razão ou fantasia...">
+      </div>
+      ${UI.table(['CNPJ','Razão Social','Nome Fantasia','Situação','Ações'], rows, 'tbl-terc')}</div>`;
   }
   after.terceirizadas=()=>{
     document.getElementById('add').onclick=()=>fornForm();
@@ -141,8 +147,9 @@ window.Views = (function(){
     const rows=Auth.filterContratos(Store.all('contratos')).map(c=>{
       const f=forn.find(x=>x.id===c.fornecedorId)||{}, o=obras.find(x=>x.id===c.obraId)||{};
       const st=Logic.statusContrato(c,docs);
-      const bd = st.pct>=100?B('Completa','b-ok'): st.vencidos>0?B('Com vencidos','b-err'): st.pct>0?B(st.pct+'%','b-part'):B('Pendente','b-warn');
-      return `<tr>
+      const sk = st.pct>=100?'completa': st.vencidos>0?'vencidos': st.pct>0?'parcial':'pendente';
+      const bd = sk==='completa'?B('Completa','b-ok'): sk==='vencidos'?B('Com vencidos','b-err'): sk==='parcial'?B(st.pct+'%','b-part'):B('Pendente','b-warn');
+      return `<tr data-obra="${E(o.nome||'')}" data-status="${sk}">
         <td class="num">${E(c.numero)}</td>
         <td>${E((c.objeto||'').slice(0,42))}</td>
         <td>${E(f.fantasia||f.razao||'—')}</td>
@@ -154,10 +161,19 @@ window.Views = (function(){
           <button class="icon-act edit" data-edit="${c.id}" title="Editar">✎</button>
           <button class="icon-act del" data-del="${c.id}">🗑</button></td></tr>`;
     });
+    const obrasList=Auth.filterObras(Store.all('obras'));
     return UI.pageHead('📄','Contratos','<button class="btn btn-dark" id="add">+ Novo</button>')+
-      `<div class="card"><div class="filter-head">🔎 Legenda: ${B('Completa','b-ok')} ${B('Parcial','b-part')} ${B('Pendente','b-warn')} ${B('Com vencidos','b-err')}</div></div>
+      `<div class="card"><div class="filter-head">🔎 Filtros</div>
+        <div class="filter-body">
+          <div class="field"><label>Buscar</label><input data-filter-tbl="#tbl-contr" placeholder="Número, objeto, fornecedor..."></div>
+          <div class="field"><label>Obra</label><select data-filter-tbl="#tbl-contr" data-col="obra"><option value="">Todas</option>${UI.option(obrasList,'nome','nome')}</select></div>
+          <div class="field"><label>Status da documentação</label><select data-filter-tbl="#tbl-contr" data-col="status">
+            <option value="">Todos</option><option value="completa">Completa</option><option value="parcial">Parcial</option><option value="pendente">Pendente</option><option value="vencidos">Com vencidos</option></select></div>
+        </div>
+        <div style="padding:0 16px 12px" class="help">Legenda: ${B('Completa','b-ok')} ${B('Parcial','b-part')} ${B('Pendente','b-warn')} ${B('Com vencidos','b-err')}</div>
+      </div>
        <div class="card"><div class="card-title">Contratos</div>
-       ${UI.table(['Número','Objeto','Fornecedor','Obra','Tipo de Contrato','Status Docs','Ações'], rows)}</div>`;
+       ${UI.table(['Número','Objeto','Fornecedor','Obra','Tipo de Contrato','Status Docs','Ações'], rows, 'tbl-contr')}</div>`;
   }
   after.contratos=(param)=>{
     if(param) return; // sub-tela cuida dos próprios binds
@@ -240,7 +256,8 @@ window.Views = (function(){
     if(tab==='COLABORADORES') body=colaboradoresTab(c, docs);
     else body=docsTab(c, tab, docs);
 
-    return UI.pageHead('📁','Documentos do Contrato','<button class="btn" onclick="location.hash=\'#/contratos\'">← Voltar</button>')+
+    return UI.pageHead('📁','Documentos do Contrato',
+      '<button class="btn btn-primary" id="aprovar-todos">✔ Aprovar todos (empresa)</button><button class="btn" onclick="location.hash=\'#/contratos\'">← Voltar</button>')+
       head+tabsHTML+legend+body;
   }
   after['contratos']; // já definido; abaixo tratamos binds da subtela em router hook
@@ -295,6 +312,8 @@ window.Views = (function(){
   // binds da subtela de documentos (chamado pelo router hook em app.js)
   function bindDocsContrato(id){
     const c=Store.get('contratos',id); if(!c) return;
+    const at=document.getElementById('aprovar-todos');
+    if(at) at.onclick=()=>{ if(confirm('Aprovar todos os documentos da EMPRESA deste contrato (habilitação/ativação, encerramento e o período periódico atual)? Isso marca a documentação como completa mesmo com pendências.')) aprovarTodosEmpresa(c); };
     document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ window.__docTab=t.dataset.tab; UI.router(); });
     const per=document.getElementById('periodo'); if(per) per.onchange=()=>{ window.__periodo=per.value; UI.router(); };
     document.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{
@@ -313,6 +332,19 @@ window.Views = (function(){
     inst.entregue=true; inst.statusAprovacao=status;
     inst.inseridoPor=(window.__user||{}).nome||'—'; inst.inseridoEm=new Date().toISOString();
     Store.upsert('documentos',inst); UI.toast('Status: '+Logic.statusInfo(status).label); UI.router();
+  }
+  function aprovarTodosEmpresa(c){
+    const periodo=window.__periodo||periodoAtual();
+    const docs=Store.all('documentos');
+    Logic.docsDoTipo(c.tipoContratoId).filter(d=>Logic.nivel(d)==='EMPRESA').forEach(td=>{
+      const isPer=td.fase==='PERIODICO'; const per=isPer?periodo:null;
+      const inst=Logic.findInst(docs, td.id, c.id, null, per)
+        || {tipoDocumentoId:td.id, contratoId:c.id, colaboradorId:null, periodo:per};
+      inst.entregue=true; inst.statusAprovacao='APROVADO';
+      inst.inseridoPor=(window.__user||{}).nome||'—'; inst.inseridoEm=new Date().toISOString();
+      Store.upsert('documentos', inst);
+    });
+    UI.toast('Documentos da empresa aprovados ✓'); UI.router();
   }
   function anexarForm(c, tdId, periodo, colaboradorId){
     const td=Logic.byId(tdId);
@@ -401,14 +433,22 @@ window.Views = (function(){
       document.getElementById('go-medicao').onclick=()=>location.hash='#/boletins/medicao';
       return;
     }
+    const ob=document.getElementById('b-obra');
+    if(ob) ob.onchange=()=>{ window.__bobra=ob.value; window.__bcontrato=''; UI.router(); };
     const sel=document.getElementById('b-contrato');
     if(sel) sel.onchange=()=>{ window.__bcontrato=sel.value; UI.router(); };
     const per=document.getElementById('b-periodo');
     if(per) per.onchange=()=>{ window.__bperiodo=per.value; UI.router(); };
     const pr=document.getElementById('print'); if(pr) pr.onclick=()=>window.print();
   };
+  function obraPicker(){
+    const obras=Auth.filterObras(Store.all('obras'));
+    return `<select id="b-obra"><option value="">Todas as obras</option>${UI.option(obras,'id','nome',window.__bobra)}</select>`;
+  }
   function contratoPicker(id){
-    const contr=Auth.filterContratos(Store.all('contratos')).map(c=>{
+    let list=Auth.filterContratos(Store.all('contratos'));
+    if(window.__bobra) list=list.filter(c=>c.obraId===window.__bobra);
+    const contr=list.map(c=>{
       const f=Store.get('fornecedores',c.fornecedorId)||{}; return {id:c.id,nome:c.numero+' · '+(f.fantasia||f.razao||'')};});
     return `<select id="${id}"><option value="">— selecione o contrato —</option>${UI.option(contr,'id','nome',window.__bcontrato)}</select>`;
   }
@@ -431,11 +471,13 @@ window.Views = (function(){
         <h2>Boletim de Entrada no Canteiro</h2>
         <div class="bsub">${E(f.razao||'')} · Obra: ${E(o.nome||'')} · Contrato ${E(c.numero)} · Emitido em ${new Date().toLocaleDateString('pt-BR')}</div>
         <div class="verdict ${totLib===colab.length&&colab.length>0?'go':'no'}">${totLib} de ${colab.length} colaboradores liberados</div>
+        <div class="help" style="margin:8px 0 14px">Um colaborador só é <b>liberado para entrada</b> quando <b>todos</b> os seus documentos estão anexados, dentro da validade e <b>aprovados</b> pelo setor responsável (SESMT / DP).</div>
         ${blocos}</div>`;
     }
     return UI.pageHead('🚧','Boletim de Entrada',
       '<button class="btn no-print" id="print">🖨 Imprimir</button>')+
       `<div class="card no-print"><div class="filter-body">
+        <div class="field"><label>Obra</label>${obraPicker()}</div>
         <div class="field"><label>Contrato</label>${contratoPicker('b-contrato')}</div></div></div>${body}`;
   }
   function boletimMedicao(){
@@ -445,23 +487,28 @@ window.Views = (function(){
     if(c){
       const f=Store.get('fornecedores',c.fornecedorId)||{}, o=Store.get('obras',c.obraId)||{}, docs=Store.all('documentos');
       const m=Logic.avaliaMedicao(c, periodo, docs);
-      const line=x=>`<tr><td>${E(x.td.documento)}</td><td>${x.inst&&x.inst.validade?Logic.fmtDate(x.inst.validade):'—'}</td>
+      const pstatus=Logic.periodoStatus(periodo);
+      const line=x=>`<tr><td>${E(x.td.documento)}</td>
+        <td>${x.inst&&x.inst.validade?Logic.fmtDate(x.inst.validade):'—'}</td>
+        <td>${x.inst&&x.inst.inseridoPor?E(x.inst.inseridoPor):'—'}</td>
         <td>${B(x.sit.label,x.sit.cls)}</td><td>${B(Logic.statusInfo(x.st).label,Logic.statusInfo(x.st).cls)}</td></tr>`;
       body=`<div class="boletim">
         <h2>Boletim de Medição</h2>
-        <div class="bsub">${E(f.razao||'')} · Obra: ${E(o.nome||'')} · Contrato ${E(c.numero)} · Período ${E(periodo)} · Emitido em ${new Date().toLocaleDateString('pt-BR')}</div>
+        <div class="bsub">${E(f.razao||'')} · Obra: ${E(o.nome||'')} · Contrato ${E(c.numero)} · Período ${E(periodo)} ${pstatus==='FECHADO'?'(fechado)':'(aberto)'} · Emitido em ${new Date().toLocaleDateString('pt-BR')}</div>
         <div class="verdict ${m.liberado?'go':'no'}">${m.liberado?'✅ PAGAMENTO LIBERADO':'⛔ PAGAMENTO BLOQUEADO'}</div>
-        <h3 style="margin:16px 0 4px">Documentos periódicos do mês</h3>
-        ${UI.table(['Documento','Validade','Situação','Status'], m.periodicos.map(line))}
+        <div class="help" style="margin:8px 0 14px">Os documentos periódicos <b>anexados e validados para ${E(periodo)}</b> entram automaticamente neste boletim. A medição só é liberada quando todos estão <b>Aprovados</b> e a habilitação da empresa (CNDs/licenças) está válida.</div>
+        <h3 style="margin:16px 0 4px">Documentos periódicos do período (${E(periodo)})</h3>
+        ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.periodicos.map(line))}
         <h3 style="margin:16px 0 4px">Habilitação da empresa (CNDs / licenças)</h3>
-        ${UI.table(['Documento','Validade','Situação','Status'], m.habilitacao.map(line))}
+        ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.habilitacao.map(line))}
       </div>`;
     }
     return UI.pageHead('💰','Boletim de Medição',
       '<button class="btn no-print" id="print">🖨 Imprimir</button>')+
       `<div class="card no-print"><div class="filter-body">
+        <div class="field"><label>Obra</label>${obraPicker()}</div>
         <div class="field"><label>Contrato</label>${contratoPicker('b-contrato')}</div>
-        <div class="field"><label>Período</label><input type="month" id="b-periodo" value="${periodo}"></div>
+        <div class="field"><label>Período da medição</label><input type="month" id="b-periodo" value="${periodo}"></div>
       </div></div>${body}`;
   }
 
@@ -480,8 +527,11 @@ window.Views = (function(){
     return UI.pageHead('📅','Períodos',
       `<input type="month" id="np" value="${periodoAtual()}" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px">
        <button class="btn btn-dark" id="addp">+ Abrir período</button>`)+
-      `<div class="card"><div class="card-title">Competências</div>
-      ${UI.table(['Competência','Situação','Fechado por','Ações'], rows)}</div>
+      `<div class="card"><div class="card-title" style="justify-content:space-between">
+        <span>Competências</span>
+        <input class="flt" data-filter-tbl="#tbl-per" placeholder="🔎 Filtrar competência ou situação...">
+      </div>
+      ${UI.table(['Competência','Situação','Fechado por','Ações'], rows, 'tbl-per')}</div>
       <div class="help card" style="padding:14px 18px">Fechar um período trava a inclusão e a edição de documentos periódicos e o lançamento da medição daquele mês.</div>`;
   }
   after.periodos=()=>{

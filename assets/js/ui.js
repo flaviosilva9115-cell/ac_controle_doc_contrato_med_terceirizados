@@ -80,7 +80,7 @@ window.UI = (function(){
     const route=parts[0]||'dashboard'; const param=parts[1]||null; const sub=parts[2]||null;
     setActive(route);
     const host=document.getElementById('main-content'); if(!host) return;
-    try{ window.Views.render(route, param, sub, host); }
+    try{ window.Views.render(route, param, sub, host); bindFilters(); }
     catch(e){ host.innerHTML='<div class="card"><div class="empty">Erro: '+esc(e.message)+'</div></div>'; console.error(e); }
   }
 
@@ -89,15 +89,44 @@ window.UI = (function(){
     return `<div class="page-head"><div class="pic">${icon}</div><h1>${esc(title)}</h1>
       <div class="actions">${actionsHTML||''}</div></div><div class="page-rule"></div>`;
   }
-  function table(cols, rows){
-    return `<div class="tbl-wrap"><table class="tbl"><thead><tr>${
+  function table(cols, rows, id){
+    return `<div class="tbl-wrap"><table class="tbl"${id?' id="'+id+'"':''}><thead><tr>${
       cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${
       rows.length? rows.join('') : `<tr><td colspan="${cols.length}"><div class="empty">Nenhum registro encontrado.</div></td></tr>`
     }</tbody></table></div>`;
+  }
+  // filtros dinâmicos: elementos com data-filter-tbl="#idTabela" filtram ao vivo.
+  // selects com data-col="x" casam com o atributo data-x da linha; inputs casam com o texto.
+  function bindFilters(){
+    const groups={};
+    document.querySelectorAll('[data-filter-tbl]').forEach(el=>{
+      const sel=el.getAttribute('data-filter-tbl');
+      (groups[sel]=groups[sel]||[]).push(el);
+    });
+    Object.keys(groups).forEach(sel=>{
+      groups[sel].forEach(el=>{
+        const ev=el.tagName==='SELECT'?'onchange':'oninput';
+        el[ev]=()=>applyFilter(sel, groups[sel]);
+      });
+    });
+  }
+  function applyFilter(sel, controls){
+    const tbl=document.querySelector(sel); if(!tbl) return;
+    tbl.querySelectorAll('tbody tr').forEach(tr=>{
+      if(tr.querySelector('.empty')){ tr.style.display=''; return; }
+      let ok=true;
+      controls.forEach(c=>{
+        const v=(c.value||'').trim().toLowerCase(); if(!v) return;
+        if(c.tagName==='SELECT' && c.getAttribute('data-col')){
+          if((tr.getAttribute('data-'+c.getAttribute('data-col'))||'').toLowerCase()!==v) ok=false;
+        } else if(tr.textContent.toLowerCase().indexOf(v)<0) ok=false;
+      });
+      tr.style.display=ok?'':'none';
+    });
   }
   function option(list, val, label, sel){
     return list.map(x=>`<option value="${esc(x[val])}"${x[val]===sel?' selected':''}>${esc(x[label])}</option>`).join('');
   }
 
-  return { LOGO, esc, badge, toast, modal, close, renderShell, setActive, router, pageHead, table, option };
+  return { LOGO, esc, badge, toast, modal, close, renderShell, setActive, router, pageHead, table, option, bindFilters };
 })();

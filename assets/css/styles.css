@@ -51,28 +51,28 @@ a{color:var(--ac-red);text-decoration:none}
 
 /* ---------- APP SHELL ---------- */
 #app{display:none;min-height:100vh}
-.topbar{height:56px;background:var(--dark);color:#fff;display:flex;align-items:center;
-  gap:14px;padding:0 16px;position:sticky;top:0;z-index:30}
+.topbar{height:56px;background:var(--ac-red);color:#fff;display:flex;align-items:center;
+  gap:14px;padding:0 16px;position:sticky;top:0;z-index:30;box-shadow:0 1px 4px rgba(0,0,0,.12)}
 .topbar .wm{width:30px;height:30px}
 .topbar .brand{font:900 15px Arial;letter-spacing:.5px}
-.topbar .brand small{display:block;font:400 8px Arial;letter-spacing:2px;color:#c9c9cc}
+.topbar .brand small{display:block;font:400 8px Arial;letter-spacing:2px;color:#f4d4d4}
 .topbar .spacer{flex:1}
-.topbar .who{font-size:12px;color:#c9c9cc}
-.topbar .icon-btn{background:transparent;border:0;color:#c9c9cc;font-size:13px;padding:6px 8px;border-radius:6px}
-.topbar .icon-btn:hover{background:rgba(255,255,255,.1);color:#fff}
+.topbar .who{font-size:12px;color:rgba(255,255,255,.9)}
+.topbar .icon-btn{background:transparent;border:0;color:rgba(255,255,255,.92);font-size:13px;padding:6px 8px;border-radius:6px}
+.topbar .icon-btn:hover{background:rgba(255,255,255,.16);color:#fff}
 .layout{display:flex;align-items:flex-start}
-.sidebar{width:236px;min-height:calc(100vh - 56px);background:var(--dark);flex-shrink:0;padding:10px 0}
-.sidebar .nav-item{display:flex;align-items:center;gap:10px;color:#c9c9cc;padding:11px 18px;
+.sidebar{width:236px;min-height:calc(100vh - 56px);background:#fff;flex-shrink:0;padding:10px 0;border-right:1px solid var(--line)}
+.sidebar .nav-item{display:flex;align-items:center;gap:10px;color:#4a4a4c;padding:11px 18px;
   font-size:13px;border-left:3px solid transparent;cursor:pointer}
 .sidebar .nav-item .ic{width:18px;text-align:center;opacity:.9}
-.sidebar .nav-item:hover{background:var(--dark-2);color:#fff}
-.sidebar .nav-item.active{background:rgba(148,22,22,.16);border-left-color:var(--ac-red);color:#fff;font-weight:700}
-.sidebar .nav-sep{color:#6b6b70;font-size:10px;letter-spacing:1px;padding:14px 18px 6px}
+.sidebar .nav-item:hover{background:#f4f4f6;color:#1a1a1a}
+.sidebar .nav-item.active{background:#fbecec;border-left-color:var(--ac-red);color:var(--ac-red);font-weight:700}
+.sidebar .nav-sep{color:#a2a2a6;font-size:10px;letter-spacing:1px;padding:14px 18px 6px}
 .main{flex:1;padding:22px 26px;min-width:0}
 
 /* ---------- PAGE HEADER (padrão Mentor) ---------- */
 .page-head{display:flex;align-items:center;gap:12px;margin-bottom:4px}
-.page-head .pic{width:40px;height:40px;background:var(--dark);color:#fff;border-radius:8px;
+.page-head .pic{width:40px;height:40px;background:var(--ac-red);color:#fff;border-radius:8px;
   display:flex;align-items:center;justify-content:center;font-size:18px}
 .page-head h1{font-size:20px;margin:0;flex:1}
 .page-head .actions{display:flex;gap:8px}
@@ -84,7 +84,8 @@ a{color:var(--ac-red);text-decoration:none}
 .btn:hover{background:#f6f6f8}
 .btn-primary{background:var(--ac-red);border-color:var(--ac-red);color:#fff}
 .btn-primary:hover{background:var(--ac-red-dark)}
-.btn-dark{background:var(--dark);border-color:var(--dark);color:#fff}
+.btn-dark{background:var(--ac-gray);border-color:var(--ac-gray);color:#fff}
+.btn-dark:hover{filter:brightness(.94)}
 .btn-ghost{background:transparent;border-color:transparent;color:var(--muted)}
 .btn-sm{padding:6px 10px;font-size:12px}
 .icon-act{width:30px;height:30px;border-radius:6px;border:0;display:inline-flex;align-items:center;
@@ -95,7 +96,7 @@ a{color:var(--ac-red);text-decoration:none}
 
 /* ---------- CARDS / FILTRO ---------- */
 .card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px;overflow:hidden}
-.filter-head{background:var(--dark);color:#fff;padding:11px 16px;font-size:13px;font-weight:700;
+.filter-head{background:var(--ac-gray);color:#fff;padding:11px 16px;font-size:13px;font-weight:700;
   display:flex;align-items:center;gap:8px}
 .filter-body{padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
 .filter-body .field{display:flex;flex-direction:column}
@@ -103,6 +104,7 @@ a{color:var(--ac-red);text-decoration:none}
 .field input,.field select,.field textarea{padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;background:#fff}
 .field textarea{resize:vertical;min-height:64px}
 .card-title{padding:12px 16px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+.flt{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font-size:13px;min-width:240px;font-family:inherit}
 
 /* ---------- TABELAS (cabeçalho lavanda Mentor) ---------- */
 .tbl-wrap{overflow-x:auto}
@@ -175,7 +177,7 @@ table.tbl .num{color:var(--ac-red);font-weight:700}
 .verdict.go{background:var(--ok-bg);color:#1c7a41;border:1px solid #bfe6cd}
 .verdict.no{background:var(--err-bg);color:#a12222;border:1px solid #f0c3c3}
 
-.toast{position:fixed;bottom:22px;right:22px;background:var(--dark);color:#fff;padding:12px 18px;
+.toast{position:fixed;bottom:22px;right:22px;background:#3a3a3c;color:#fff;padding:12px 18px;
   border-radius:10px;font-size:13px;z-index:80;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .help{font-size:12px;color:var(--muted);line-height:1.6}
 .code{background:#f4f4f6;border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-family:ui-monospace,monospace;font-size:12px}

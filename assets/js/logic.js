@@ -106,7 +106,7 @@ window.Logic = (function(){
 
   // consolida status do contrato (para a lista de contratos)
   function statusContrato(contrato, docs){
-    const req=docsDoTipo(contrato.tipoContratoId).filter(d=>nivel(d)==='EMPRESA');
+    const req=docsDoTipo(contrato.tipoContratoId).filter(d=>nivel(d)==='EMPRESA' && d.fase!=='PERIODICO');
     let apro=0, venc=0;
     req.forEach(td=>{
       const inst=findInst(docs, td.id, contrato.id, null, null);

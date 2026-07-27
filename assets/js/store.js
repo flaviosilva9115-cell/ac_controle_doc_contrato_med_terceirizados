@@ -1,0 +1,95 @@
+/* =====================================================================
+   store.js — camada de dados
+   Banco = um JSON. Persistência local (localStorage) por padrão.
+   Sincronização opcional e GRATUITA com um arquivo db.json no próprio
+   repositório do GitHub (via GitHub Contents API) => banco compartilhado.
+   ===================================================================== */
+(function(){
+  const LS_KEY = 'painel_terc_db_v1';
+  const CFG_KEY = 'painel_terc_cfg_v1';       // config do GitHub (sem token)
+  const TOK_KEY = 'painel_terc_ghtoken';      // token só na sessão
+
+  const emptyDB = () => ({
+    meta:{ version:1, updatedAt:new Date().toISOString() },
+    obras:[], fornecedores:[], contratos:[], colaboradores:[],
+    documentos:[], boletins:[],
+    usuarios:[{ id:'u-admin', nome:'Administrador', login:'admin', senha:'admin', perfil:'GESTOR' }]
+  });
+
+  let db = load();
+
+  function uid(p){ return (p||'id')+'-'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+  function load(){
+    try{ const raw = localStorage.getItem(LS_KEY); if(raw) return JSON.parse(raw); }catch(e){}
+    return emptyDB();
+  }
+  function save(){
+    db.meta.updatedAt = new Date().toISOString();
+    localStorage.setItem(LS_KEY, JSON.stringify(db));
+  }
+  function reset(){ db = emptyDB(); save(); }
+
+  // ---- CRUD genérico ----
+  const all = c => (db[c]||[]).slice();
+  const get = (c,id) => (db[c]||[]).find(x=>x.id===id) || null;
+  function upsert(c,obj){
+    if(!db[c]) db[c]=[];
+    if(!obj.id){ obj.id = uid(c.slice(0,3)); db[c].push(obj); }
+    else{ const i=db[c].findIndex(x=>x.id===obj.id); if(i>=0) db[c][i]=obj; else db[c].push(obj); }
+    save(); return obj;
+  }
+  function remove(c,id){ if(db[c]) db[c]=db[c].filter(x=>x.id!==id); save(); }
+  function where(c,fn){ return (db[c]||[]).filter(fn); }
+
+  // ---- export / import (para versionar no repo ou compartilhar) ----
+  function exportJSON(){ return JSON.stringify(db,null,2); }
+  function importJSON(text){
+    const parsed = JSON.parse(text);
+    if(!parsed || typeof parsed!=='object') throw new Error('JSON inválido');
+    db = Object.assign(emptyDB(), parsed); save();
+  }
+
+  // ---- Config GitHub sync ----
+  function getCfg(){ try{ return JSON.parse(localStorage.getItem(CFG_KEY))||{}; }catch(e){ return {}; } }
+  function setCfg(cfg){ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
+  function getToken(){ return sessionStorage.getItem(TOK_KEY)||''; }
+  function setToken(t){ if(t) sessionStorage.setItem(TOK_KEY,t); else sessionStorage.removeItem(TOK_KEY); }
+
+  async function ghApi(path, method, body){
+    const cfg=getCfg(), token=getToken();
+    if(!cfg.owner||!cfg.repo||!token) throw new Error('Configure o GitHub (owner, repo e token) nas Configurações.');
+    const url=`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${cfg.path||'db.json'}`+(method==='GET'?`?ref=${cfg.branch||'main'}`:'');
+    const res=await fetch(url,{ method, headers:{
+        'Authorization':'Bearer '+token, 'Accept':'application/vnd.github+json'
+      }, body: body?JSON.stringify(body):undefined });
+    if(res.status===404 && method==='GET') return null;
+    if(!res.ok) throw new Error('GitHub '+res.status+': '+(await res.text()).slice(0,180));
+    return res.json();
+  }
+  function b64encode(str){ return btoa(unescape(encodeURIComponent(str))); }
+  function b64decode(str){ return decodeURIComponent(escape(atob(str.replace(/\n/g,'')))); }
+
+  async function pull(){
+    const j=await ghApi('', 'GET');
+    if(!j) throw new Error('Arquivo db.json ainda não existe no repo — faça um "Enviar" primeiro.');
+    db = Object.assign(emptyDB(), JSON.parse(b64decode(j.content))); save();
+    return j.sha;
+  }
+  async function push(){
+    const cfg=getCfg();
+    let sha=null; try{ const cur=await ghApi('','GET'); if(cur) sha=cur.sha; }catch(e){}
+    await ghApi('', 'PUT', {
+      message:'update db.json — painel terceirizadas '+new Date().toISOString(),
+      content:b64encode(exportJSON()),
+      branch:cfg.branch||'main',
+      sha:sha||undefined
+    });
+  }
+
+  window.Store = {
+    uid, save, reset, all, get, upsert, remove, where,
+    exportJSON, importJSON, raw:()=>db,
+    getCfg, setCfg, getToken, setToken, pull, push
+  };
+})();

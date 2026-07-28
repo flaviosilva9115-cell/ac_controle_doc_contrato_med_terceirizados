@@ -14,7 +14,7 @@ window.UI = (function(){
     {r:'dashboard', ic:'📊', lbl:'Painel Geral'},
     {sep:'CADASTROS'},
     {r:'obras', ic:'🏗️', lbl:'Obras'},
-    {r:'terceirizadas', ic:'🏢', lbl:'Terceirizadas'},
+    {r:'apoio', ic:'🗂️', lbl:'Apoio'},
     {r:'contratos', ic:'📄', lbl:'Contratos'},
     {r:'sienge', ic:'🔗', lbl:'Importar do Sienge', admin:true},
     {sep:'LIBERAÇÃO'},

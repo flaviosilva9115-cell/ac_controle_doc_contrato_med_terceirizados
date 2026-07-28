@@ -123,7 +123,7 @@ window.Logic = (function(){
     const entradaOk = pendEntrada.length===0;
     const vigente = contratoVigente(contrato);
     const perOk = per.every(x=>x.ok) && per.length>0;
-    const liberado = perOk && entradaOk && vigente;
+    const liberado = perOk && vigente;
     return {modo, periodicos:per, encerramento:[], habilitacao:hab, colabs, pendEntrada, entradaOk, vigente, perOk, liberado};
   }
 

@@ -7,7 +7,7 @@ window.Views = (function(){
 
   function render(route, param, sub, host){
     const fn = ({
-      dashboard, obras, terceirizadas, contratos, sienge, boletins, periodos, config
+      dashboard, obras, terceirizadas, apoio, contratos, sienge, boletins, periodos, config
     })[route] || dashboard;
     host.innerHTML = fn(param, sub);
     if(after[route]) after[route](param, sub);
@@ -106,25 +106,45 @@ window.Views = (function(){
   }
 
   /* ---------------- TERCEIRIZADAS ---------------- */
-  function terceirizadas(){
+  function tercCard(){
     const rows=Store.all('fornecedores').map(f=>`<tr>
       <td>${E(f.cnpj||'—')}</td><td>${E(f.razao)}</td><td>${E(f.fantasia||'—')}</td>
       <td>${f.ativo!==false?B('Ativo','b-ok'):B('Inativo','b-muted')}</td>
       <td style="text-align:right">
         <button class="icon-act edit" data-edit="${f.id}">✎</button>
         <button class="icon-act del" data-del="${f.id}">🗑</button></td></tr>`);
-    return UI.pageHead('🏢','Terceirizadas','<button class="btn btn-dark" id="add">+ Nova</button>')+
-      `<div class="card"><div class="card-title" style="justify-content:space-between">
-        <span>Empresas terceirizadas</span>
-        <input class="flt" data-filter-tbl="#tbl-terc" placeholder="🔎 Filtrar por CNPJ, razão ou fantasia...">
+    return `<div class="card"><div class="card-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <span>Pessoa Jurídica — Empresas terceirizadas</span>
+        <span style="display:flex;gap:8px;align-items:center">
+          <input class="flt" data-filter-tbl="#tbl-terc" placeholder="🔎 CNPJ, razão ou fantasia...">
+          <button class="btn btn-sm btn-dark" id="add-terc">+ Nova terceirizada</button>
+        </span>
       </div>
       ${UI.table(['CNPJ','Razão Social','Nome Fantasia','Situação','Ações'], rows, 'tbl-terc')}</div>`;
   }
-  after.terceirizadas=()=>{
-    document.getElementById('add').onclick=()=>fornForm();
+  function bindTerc(){
+    const a=document.getElementById('add-terc'); if(a) a.onclick=()=>fornForm();
     document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>fornForm(Store.get('fornecedores',b.dataset.edit)));
     document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
       if(confirm('Excluir esta terceirizada?')){ Store.remove('fornecedores',b.dataset.del); UI.router(); }});
+  }
+  function terceirizadas(){ return UI.pageHead('🏢','Terceirizadas','')+tercCard(); }
+  after.terceirizadas=bindTerc;
+
+  /* ---------------- APOIO (Pessoa Física / Jurídica) ---------------- */
+  function apoio(){
+    const tab=window.__apoioTab||'pj';
+    const tabs=`<div class="tabs">
+      <div class="tab ${tab==='pj'?'active':''}" data-atab="pj">🏢 Pessoa Jurídica (Terceirizadas)</div>
+      <div class="tab ${tab==='pf'?'active':''}" data-atab="pf">👷 Pessoa Física (Colaboradores)</div></div>`;
+    const body = tab==='pf' ? cfgColab() : tercCard();
+    return UI.pageHead('🗂️','Apoio — Cadastros','')+
+      `<div class="help card" style="padding:10px 16px">Cadastre aqui as <b>terceirizadas</b> (pessoa jurídica) e os <b>colaboradores</b> (pessoa física), vinculando cada colaborador à sua terceirizada e ao contrato.</div>`+
+      tabs+body;
+  }
+  after.apoio=()=>{
+    document.querySelectorAll('[data-atab]').forEach(t=>t.onclick=()=>{ window.__apoioTab=t.dataset.atab; UI.router(); });
+    if((window.__apoioTab||'pj')==='pf') bindColab(); else bindTerc();
   };
   function fornForm(f){ f=f||{};
     UI.modal(`<div class="m-head"><h3>${f.id?'Editar':'Nova'} Terceirizada</h3><button class="x-close" onclick="UI.close()">×</button></div>
@@ -538,18 +558,15 @@ window.Views = (function(){
       const selos = ehEnc
         ? `${(m.encerramento.length && m.liberado)?B('Documentos de encerramento OK','b-ok'):B('Encerramento pendente','b-err')}`
         : `${m.vigente?B('Contrato vigente','b-ok'):B('Contrato fora de vigência','b-err')}
-           ${m.perOk?B('Documentos periódicos OK','b-ok'):B('Periódicos pendentes','b-err')}
-           ${m.entradaOk?B('Entrada no canteiro liberada','b-ok'):B(m.pendEntrada.length+' colaborador(es) com pendência','b-err')}`;
+           ${m.perOk?B('Documentos periódicos OK','b-ok'):B('Periódicos pendentes','b-err')}`;
       const secaoPrincipal = ehEnc
         ? `<h3 style="margin:16px 0 4px">Documentos de encerramento — DP</h3>
            ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.encerramento.map(line))}`
-        : `<h3 style="margin:16px 0 4px">Documentos periódicos do período — DP/SESMT (${E(periodo)})</h3>
-           ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.periodicos.map(line))}
-           <h3 style="margin:16px 0 4px">Liberação de entrada no canteiro (colaboradores)</h3>
-           ${UI.table(['Colaborador','Função','Entrada'], m.colabs.map(colabLinha))}`;
+        : `<h3 style="margin:16px 0 4px">Documentos periódicos da empresa — DP/SESMT (${E(periodo)})</h3>
+           ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.periodicos.map(line))}`;
       const regra = ehEnc
         ? 'Medição de <b>encerramento</b>: é liberada quando o <b>DP aprova os documentos de encerramento</b>. Não exige a parte de periódicos.'
-        : 'Medição <b>periódica</b>: documentos de Suprimentos não bloqueiam; bloqueiam apenas os <b>periódicos de DP/SESMT</b>, e o período só é validado sem pendência na <b>entrada no canteiro</b>. Não exige a parte de encerramento.';
+        : 'Medição <b>periódica</b>: é liberada quando o <b>DP aprova os documentos periódicos</b> da empresa (contrato vigente). Não exige a parte de encerramento.';
       body=`<div class="boletim">
         <h2>Boletim de Medição — ${ehEnc?'Encerramento':'Periódica'}</h2>
         <div class="bsub">${E(f.razao||'')} · Obra: ${E(o.nome||'')} · Contrato ${E(c.numero)}${ehEnc?'':' · Período '+E(periodo)+' '+(pstatus==='FECHADO'?'(fechado)':'(aberto)')} · Emitido em ${new Date().toLocaleDateString('pt-BR')}</div>
@@ -557,8 +574,6 @@ window.Views = (function(){
         <div class="help" style="margin:8px 0 14px">${regra}</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${selos}</div>
         ${secaoPrincipal}
-        <h3 style="margin:16px 0 4px">Suprimentos — habilitação (informativo, não bloqueia)</h3>
-        ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.habilitacao.map(line))}
       </div>`;
     }
     return UI.pageHead('💰','Boletim de Medição',
@@ -613,7 +628,7 @@ window.Views = (function(){
 
   /* ---------------- CONFIG (abas) ---------------- */
   const PERFIS=['GESTOR','COMPRADOR','APROVADOR','SESMT','DP','PORTARIA','FINANCEIRO'];
-  const CFG_TABS=[['usuarios','Usuários'],['tcontrato','Tipos de Contrato'],['tdoc','Tipos de Documento'],['colab','Colaboradores'],['banco','Banco & Sincronização']];
+  const CFG_TABS=[['usuarios','Usuários'],['tcontrato','Tipos de Contrato'],['tdoc','Tipos de Documento'],['banco','Banco & Sincronização']];
   function config(){
     const tab=window.__cfgTab||'usuarios';
     const tabs=`<div class="tabs">${CFG_TABS.map(([k,l])=>`<div class="tab ${k===tab?'active':''}" data-ctab="${k}">${l}</div>`).join('')}</div>`;

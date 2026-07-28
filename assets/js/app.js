@@ -77,5 +77,12 @@
 
   Cat.ensureSeed();
   Cat.migrateSuprimentos();
-  renderLogin();
+  (async function boot(){
+    const cfg=Store.getCfg();
+    if(cfg.owner && cfg.repo && Store.getToken()){
+      try{ await Store.pull(); }catch(e){ /* segue com dados locais */ }
+      Cat.ensureSeed(); Cat.migrateSuprimentos();
+    }
+    renderLogin();
+  })();
 })();

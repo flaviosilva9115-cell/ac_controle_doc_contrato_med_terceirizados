@@ -4,7 +4,7 @@
    ===================================================================== */
 window.Auth = (function(){
   const user = () => window.__user || null;
-  const isAdmin = () => { const u=user(); return u && (u.perfil==='GESTOR' || u.obras==='all'); };
+  const isAdmin = () => { const u=user(); return !!u && (u.admin===true || u.perfil==='GESTOR'); };
   function allowedObraIds(){
     const u=user(); if(!u || u.obras==='all' || !Array.isArray(u.obras)) return null; // null = todas
     return u.obras;

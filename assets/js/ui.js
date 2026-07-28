@@ -16,12 +16,12 @@ window.UI = (function(){
     {r:'obras', ic:'🏗️', lbl:'Obras'},
     {r:'terceirizadas', ic:'🏢', lbl:'Terceirizadas'},
     {r:'contratos', ic:'📄', lbl:'Contratos'},
-    {r:'sienge', ic:'🔗', lbl:'Importar do Sienge'},
+    {r:'sienge', ic:'🔗', lbl:'Importar do Sienge', admin:true},
     {sep:'LIBERAÇÃO'},
     {r:'boletins', ic:'✅', lbl:'Boletins'},
     {r:'periodos', ic:'📅', lbl:'Períodos'},
-    {sep:'SISTEMA'},
-    {r:'config', ic:'⚙️', lbl:'Configurações'}
+    {sep:'SISTEMA', admin:true},
+    {r:'config', ic:'⚙️', lbl:'Configurações', admin:true}
   ];
 
   function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
@@ -49,8 +49,8 @@ window.UI = (function(){
         ${LOGO(30)}
         <div class="brand">AMORIM COUTINHO<small>CONTROLE DE TERCEIRIZADAS</small></div>
         <div class="spacer"></div>
-        <span class="who">${esc(user.nome)} · ${esc(user.perfil)}</span>
-        <button class="icon-btn" id="btn-sync" title="Sincronizar com GitHub">⟳ Sinc</button>
+        <span class="who">${esc(user.nome)} · ${esc(user.perfil||'')}</span>
+        ${Auth.isAdmin()?'<button class="icon-btn" id="btn-sync" title="Sincronizar com GitHub">⟳ Sinc</button>':''}
         <button class="icon-btn" id="btn-logout">Sair</button>
       </div>
       <div class="layout">
@@ -59,13 +59,16 @@ window.UI = (function(){
       </div>
       <footer class="app-foot">Painel de Controle de Documentos de Terceirizadas · Desenvolvido por <b>Facten Suprimentos</b> · Todos os direitos reservados a <b>Amorim Coutinho</b> © 2026</footer>`;
     const sb=document.getElementById('sidebar');
-    sb.innerHTML=NAV.map(n=> n.sep
+    const admin=Auth.isAdmin();
+    const items=NAV.filter(n=>!n.admin || admin).filter((n,i,a)=> !n.sep || (a[i+1] && !a[i+1].sep));
+    sb.innerHTML=items.map(n=> n.sep
       ? `<div class="nav-sep">${n.sep}</div>`
       : `<div class="nav-item" data-r="${n.r}"><span class="ic">${n.ic}</span><span class="lbl">${n.lbl}</span></div>`
     ).join('');
     sb.querySelectorAll('.nav-item').forEach(it=>it.addEventListener('click',()=>{ location.hash='#/'+it.dataset.r; }));
     document.getElementById('btn-logout').addEventListener('click',()=>{ location.hash='#/'; location.reload(); });
-    document.getElementById('btn-sync').addEventListener('click', async ()=>{
+    const bs=document.getElementById('btn-sync');
+    if(bs) bs.addEventListener('click', async ()=>{
       try{ await Store.push(); toast('Enviado para o GitHub ✓'); }
       catch(e){ toast('Sinc: '+e.message); }
     });
@@ -80,6 +83,7 @@ window.UI = (function(){
   function router(){
     const parts=(location.hash.replace(/^#\/?/,'')||'dashboard').split('/');
     const route=parts[0]||'dashboard'; const param=parts[1]||null; const sub=parts[2]||null;
+    if((route==='config'||route==='sienge') && !Auth.isAdmin()){ location.hash='#/dashboard'; return; }
     setActive(route);
     const host=document.getElementById('main-content'); if(!host) return;
     try{ window.Views.render(route, param, sub, host); bindFilters(); }

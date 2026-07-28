@@ -640,6 +640,7 @@ window.Views = (function(){
         <div class="field"><label>E-mail</label><input id="u-email" value="${E(u.email||u.login||'')}"></div>
         <div class="field"><label>Senha</label><input id="u-senha" type="text" value="${E(u.senha||'')}"></div>
         <div class="field"><label>Perfil</label><select id="u-perfil">${PERFIS.map(p=>`<option${(u.perfil||'COMPRADOR')===p?' selected':''}>${p}</option>`).join('')}</select></div>
+        <div class="field full"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="u-admin" ${u.admin||u.perfil==='GESTOR'?'checked':''}> Administrador — acesso às Configurações, Usuários e Sienge</label></div>
         <div class="field full"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="u-all" ${all?'checked':''}> Acesso a TODAS as obras</label></div>
         <div class="field full" id="u-owrap" style="${all?'opacity:.4':''}"><label>Obras liberadas</label><div>${obrasHTML}</div></div>
       </div>
@@ -651,7 +652,8 @@ window.Views = (function(){
       let obrasVal='all';
       if(!allChk.checked) obrasVal=[].slice.call(document.querySelectorAll('.u-obra:checked')).map(x=>x.value);
       Store.upsert('usuarios',{id:u.id,nome:document.getElementById('u-nome').value.trim()||email,email,login:email,
-        senha:document.getElementById('u-senha').value,perfil:document.getElementById('u-perfil').value,obras:obrasVal});
+        senha:document.getElementById('u-senha').value,perfil:document.getElementById('u-perfil').value,
+        admin:document.getElementById('u-admin').checked, obras:obrasVal});
       UI.close(); UI.router();
     };
   }
@@ -783,12 +785,16 @@ window.Views = (function(){
           <div class="field"><label>Caminho do arquivo</label><input id="g-path" value="${E(cfg.path||'db.json')}"></div>
           <div class="field full"><label>Token (fine-grained, Contents: read/write) — fica só na sessão</label><input id="g-tok" type="password" placeholder="github_pat_..." value="${E(Store.getToken())}"></div>
         </div>
+        <div style="padding:0 18px 8px;display:flex;gap:22px;flex-wrap:wrap;font-size:13px">
+          <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="g-remember" ${cfg.remember?'checked':''}> Lembrar token neste dispositivo</label>
+          <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="g-auto" ${cfg.autoSync?'checked':''}> Auto-sincronizar alterações</label>
+        </div>
         <div style="padding:0 18px 16px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" id="g-save">Salvar config</button>
           <button class="btn btn-dark" id="g-pull">⬇ Baixar do GitHub</button>
           <button class="btn btn-primary" id="g-push">⬆ Enviar para o GitHub</button>
         </div>
-        <div class="help" style="padding:0 18px 16px">Use um <b>repositório privado</b> só para o db.json e um <b>token fine-grained</b> restrito a ele.</div>
+        <div class="help" style="padding:0 18px 16px">Use um <b>repositório privado</b> só para o db.json e um <b>token fine-grained</b> restrito a ele. "Lembrar token" só em dispositivos confiáveis — em máquina compartilhada, deixe desmarcado.</div>
       </div>`;
   }
   function bindBanco(){
@@ -800,8 +806,10 @@ window.Views = (function(){
       fr.readAsText(e.target.files[0]); };
     document.getElementById('seedbtn').onclick=()=>{ window.Seed&&window.Seed.demo(); UI.toast('Dados de exemplo carregados ✓'); UI.router(); };
     document.getElementById('rst').onclick=()=>{ if(confirm('Isso apaga todos os dados locais. Continuar?')){ Store.reset(); location.reload(); }};
-    document.getElementById('g-save').onclick=()=>{ Store.setCfg({owner:v('g-owner'),repo:v('g-repo'),branch:v('g-branch')||'main',path:v('g-path')||'db.json'});
-      Store.setToken(v('g-tok')); UI.toast('Config salva ✓'); };
+    document.getElementById('g-save').onclick=()=>{
+      const remember=document.getElementById('g-remember').checked;
+      Store.setCfg(Object.assign(Store.getCfg(),{owner:v('g-owner'),repo:v('g-repo'),branch:v('g-branch')||'main',path:v('g-path')||'db.json',remember,autoSync:document.getElementById('g-auto').checked}));
+      Store.setToken(v('g-tok'), remember); UI.toast('Config salva ✓'); };
     document.getElementById('g-pull').onclick=async()=>{ try{ await Store.pull(); UI.toast('Baixado ✓'); UI.router(); }catch(e){ UI.toast(e.message); } };
     document.getElementById('g-push').onclick=async()=>{ try{ await Store.push(); UI.toast('Enviado ✓'); }catch(e){ UI.toast(e.message); } };
     function v(id){ return document.getElementById(id).value.trim(); }

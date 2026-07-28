@@ -24,9 +24,15 @@
     try{ const raw = localStorage.getItem(LS_KEY); if(raw) return JSON.parse(raw); }catch(e){}
     return emptyDB();
   }
+  let _pushTimer=null;
   function save(){
     db.meta.updatedAt = new Date().toISOString();
     localStorage.setItem(LS_KEY, JSON.stringify(db));
+    const cfg=getCfg();
+    if(cfg.autoSync && cfg.owner && cfg.repo && getToken()){
+      clearTimeout(_pushTimer);
+      _pushTimer=setTimeout(()=>{ push().catch(()=>{}); }, 2500);
+    }
   }
   function reset(){ db = emptyDB(); save(); }
 
@@ -53,8 +59,11 @@
   // ---- Config GitHub sync ----
   function getCfg(){ try{ return JSON.parse(localStorage.getItem(CFG_KEY))||{}; }catch(e){ return {}; } }
   function setCfg(cfg){ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
-  function getToken(){ return sessionStorage.getItem(TOK_KEY)||''; }
-  function setToken(t){ if(t) sessionStorage.setItem(TOK_KEY,t); else sessionStorage.removeItem(TOK_KEY); }
+  function getToken(){ return sessionStorage.getItem(TOK_KEY)||localStorage.getItem(TOK_KEY)||''; }
+  function setToken(t, remember){
+    sessionStorage.removeItem(TOK_KEY); localStorage.removeItem(TOK_KEY);
+    if(t){ if(remember) localStorage.setItem(TOK_KEY,t); else sessionStorage.setItem(TOK_KEY,t); }
+  }
 
   async function ghApi(path, method, body){
     const cfg=getCfg(), token=getToken();

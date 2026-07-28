@@ -94,3 +94,10 @@ O login agora aceita **e-mail ou usuário**. Padrão inicial: `admin` / `admin` 
 
 - Novo menu **Importar do Sienge**: lê o arquivo `sienge-import.json` (gerado por uma GitHub Action no repositório privado) e permite **escolher** quais fornecedores, obras e contratos gravar no painel. Medições aparecem como informação.
 - A integração em si (Action + script) fica no repositório privado — veja o pacote `sienge-integration` e o `SETUP-SIENGE.md`.
+
+## Novidades v6 — Acesso por perfil e sincronização sem digitar token
+
+- **Configurações, Usuários e Importar do Sienge** agora são **exclusivos de administradores**. No cadastro de usuário há a opção **"Administrador"**. Usuários comuns só enxergam suas obras (ou todas) e não têm acesso às Configurações.
+- **Lembrar token neste dispositivo** (Configurações → Banco & Sincronização): em um computador confiável, o token fica salvo e não precisa ser digitado a cada sessão.
+- **Auto-sincronizar alterações**: quando ligado, o painel envia as mudanças ao GitHub automaticamente.
+- **Carregamento automático**: em dispositivos configurados (com token lembrado), o painel já baixa os dados compartilhados ao abrir — a equipe não precisa preencher nada, só fazer login.

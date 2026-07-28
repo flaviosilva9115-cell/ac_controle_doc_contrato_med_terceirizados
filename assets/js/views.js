@@ -263,7 +263,7 @@ window.Views = (function(){
     else body=docsTab(c, tab, docs);
 
     return UI.pageHead('📁','Documentos do Contrato',
-      '<button class="btn btn-primary" id="aprovar-todos">✔ Aprovar todos (empresa)</button><button class="btn" onclick="location.hash=\'#/contratos\'">← Voltar</button>')+
+      '<button class="btn btn-primary" id="aprovar-supr">✔ Aprovar Suprimentos</button><button class="btn" onclick="location.hash=\'#/contratos\'">← Voltar</button>')+
       head+tabsHTML+legend+body;
   }
   after['contratos']; // já definido; abaixo tratamos binds da subtela em router hook
@@ -318,8 +318,8 @@ window.Views = (function(){
   // binds da subtela de documentos (chamado pelo router hook em app.js)
   function bindDocsContrato(id){
     const c=Store.get('contratos',id); if(!c) return;
-    const at=document.getElementById('aprovar-todos');
-    if(at) at.onclick=()=>{ if(confirm('Aprovar todos os documentos da EMPRESA deste contrato (habilitação/ativação, encerramento e o período periódico atual)? Isso marca a documentação como completa mesmo com pendências.')) aprovarTodosEmpresa(c); };
+    const at=document.getElementById('aprovar-supr');
+    if(at) at.onclick=()=>{ if(confirm('Aprovar todos os documentos de SUPRIMENTOS (habilitação) deste contrato? Eles são informativos e não bloqueiam a medição. Os documentos de DP e SESMT NÃO são alterados.')) aprovarTodosSuprimentos(c); };
     document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ window.__docTab=t.dataset.tab; UI.router(); });
     const per=document.getElementById('periodo'); if(per) per.onchange=()=>{ window.__periodo=per.value; UI.router(); };
     document.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{
@@ -339,18 +339,16 @@ window.Views = (function(){
     inst.inseridoPor=(window.__user||{}).nome||'—'; inst.inseridoEm=new Date().toISOString();
     Store.upsert('documentos',inst); UI.toast('Status: '+Logic.statusInfo(status).label); UI.router();
   }
-  function aprovarTodosEmpresa(c){
-    const periodo=window.__periodo||periodoAtual();
+  function aprovarTodosSuprimentos(c){
     const docs=Store.all('documentos');
-    Logic.docsDoTipo(c.tipoContratoId).filter(d=>Logic.nivel(d)==='EMPRESA').forEach(td=>{
-      const isPer=td.fase==='PERIODICO'; const per=isPer?periodo:null;
-      const inst=Logic.findInst(docs, td.id, c.id, null, per)
-        || {tipoDocumentoId:td.id, contratoId:c.id, colaboradorId:null, periodo:per};
+    Logic.docsDoTipo(c.tipoContratoId).filter(d=>d.setor==='SUPRIMENTOS').forEach(td=>{
+      const inst=Logic.findInst(docs, td.id, c.id, null, null)
+        || {tipoDocumentoId:td.id, contratoId:c.id, colaboradorId:null, periodo:null};
       inst.entregue=true; inst.statusAprovacao='APROVADO';
       inst.inseridoPor=(window.__user||{}).nome||'—'; inst.inseridoEm=new Date().toISOString();
       Store.upsert('documentos', inst);
     });
-    UI.toast('Documentos da empresa aprovados ✓'); UI.router();
+    UI.toast('Documentos de Suprimentos aprovados ✓'); UI.router();
   }
   function anexarForm(c, tdId, periodo, colaboradorId){
     const td=Logic.byId(tdId);
@@ -478,6 +476,8 @@ window.Views = (function(){
     if(sel) sel.onchange=()=>{ window.__bcontrato=sel.value; UI.router(); };
     const per=document.getElementById('b-periodo');
     if(per) per.onchange=()=>{ window.__bperiodo=per.value; UI.router(); };
+    const md=document.getElementById('b-modo');
+    if(md) md.onchange=()=>{ window.__bmodo=md.value; UI.router(); };
     const pr=document.getElementById('print'); if(pr) pr.onclick=()=>window.print();
   };
   function obraPicker(){
@@ -522,10 +522,11 @@ window.Views = (function(){
   function boletimMedicao(){
     const cid=window.__bcontrato; const c=cid?Store.get('contratos',cid):null;
     const periodo=window.__bperiodo||periodoAtual();
+    const modo=window.__bmodo||'PERIODICO';
     let body='<div class="card"><div class="empty">Selecione um contrato para gerar o boletim.</div></div>';
     if(c){
       const f=Store.get('fornecedores',c.fornecedorId)||{}, o=Store.get('obras',c.obraId)||{}, docs=Store.all('documentos');
-      const m=Logic.avaliaMedicao(c, periodo, docs, Store.all('colaboradores'));
+      const m=Logic.avaliaMedicao(c, periodo, docs, Store.all('colaboradores'), modo);
       const pstatus=Logic.periodoStatus(periodo);
       const line=x=>`<tr><td>${E(x.td.documento)}</td>
         <td>${x.inst&&x.inst.validade?Logic.fmtDate(x.inst.validade):'—'}</td>
@@ -533,20 +534,29 @@ window.Views = (function(){
         <td>${B(x.sit.label,x.sit.cls)}</td><td>${B(Logic.statusInfo(x.st).label,Logic.statusInfo(x.st).cls)}</td></tr>`;
       const colabLinha=cl=>{ const av=Logic.avaliaColaborador(cl,c,docs);
         return `<tr><td>${E(cl.nome)}</td><td>${E(cl.funcao||'—')}</td><td>${av.liberado?B('Liberado','b-ok'):B('Pendente','b-err')}</td></tr>`; };
+      const ehEnc = modo==='ENCERRAMENTO';
+      const selos = ehEnc
+        ? `${(m.encerramento.length && m.liberado)?B('Documentos de encerramento OK','b-ok'):B('Encerramento pendente','b-err')}`
+        : `${m.vigente?B('Contrato vigente','b-ok'):B('Contrato fora de vigência','b-err')}
+           ${m.perOk?B('Documentos periódicos OK','b-ok'):B('Periódicos pendentes','b-err')}
+           ${m.entradaOk?B('Entrada no canteiro liberada','b-ok'):B(m.pendEntrada.length+' colaborador(es) com pendência','b-err')}`;
+      const secaoPrincipal = ehEnc
+        ? `<h3 style="margin:16px 0 4px">Documentos de encerramento — DP</h3>
+           ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.encerramento.map(line))}`
+        : `<h3 style="margin:16px 0 4px">Documentos periódicos do período — DP/SESMT (${E(periodo)})</h3>
+           ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.periodicos.map(line))}
+           <h3 style="margin:16px 0 4px">Liberação de entrada no canteiro (colaboradores)</h3>
+           ${UI.table(['Colaborador','Função','Entrada'], m.colabs.map(colabLinha))}`;
+      const regra = ehEnc
+        ? 'Medição de <b>encerramento</b>: é liberada quando o <b>DP aprova os documentos de encerramento</b>. Não exige a parte de periódicos.'
+        : 'Medição <b>periódica</b>: documentos de Suprimentos não bloqueiam; bloqueiam apenas os <b>periódicos de DP/SESMT</b>, e o período só é validado sem pendência na <b>entrada no canteiro</b>. Não exige a parte de encerramento.';
       body=`<div class="boletim">
-        <h2>Boletim de Medição</h2>
-        <div class="bsub">${E(f.razao||'')} · Obra: ${E(o.nome||'')} · Contrato ${E(c.numero)} · Período ${E(periodo)} ${pstatus==='FECHADO'?'(fechado)':'(aberto)'} · Emitido em ${new Date().toLocaleDateString('pt-BR')}</div>
+        <h2>Boletim de Medição — ${ehEnc?'Encerramento':'Periódica'}</h2>
+        <div class="bsub">${E(f.razao||'')} · Obra: ${E(o.nome||'')} · Contrato ${E(c.numero)}${ehEnc?'':' · Período '+E(periodo)+' '+(pstatus==='FECHADO'?'(fechado)':'(aberto)')} · Emitido em ${new Date().toLocaleDateString('pt-BR')}</div>
         <div class="verdict ${m.liberado?'go':'no'}">${m.liberado?'✅ PAGAMENTO LIBERADO':'⛔ PAGAMENTO BLOQUEADO'}</div>
-        <div class="help" style="margin:8px 0 14px">Regra: documentos de <b>Suprimentos não bloqueiam</b> o pagamento (contrato vigente e aprovado). Bloqueiam apenas os <b>periódicos de DP/SESMT</b>. O período só é validado se <b>não houver pendência na liberação de entrada no canteiro</b>.</div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-          ${m.vigente?B('Contrato vigente','b-ok'):B('Contrato fora de vigência','b-err')}
-          ${m.perOk?B('Documentos periódicos OK','b-ok'):B('Periódicos pendentes','b-err')}
-          ${m.entradaOk?B('Entrada no canteiro liberada','b-ok'):B(m.pendEntrada.length+' colaborador(es) com pendência','b-err')}
-        </div>
-        <h3 style="margin:16px 0 4px">Documentos periódicos do período — DP/SESMT (${E(periodo)})</h3>
-        ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.periodicos.map(line))}
-        <h3 style="margin:16px 0 4px">Liberação de entrada no canteiro (colaboradores)</h3>
-        ${UI.table(['Colaborador','Função','Entrada'], m.colabs.map(colabLinha))}
+        <div class="help" style="margin:8px 0 14px">${regra}</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${selos}</div>
+        ${secaoPrincipal}
         <h3 style="margin:16px 0 4px">Suprimentos — habilitação (informativo, não bloqueia)</h3>
         ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.habilitacao.map(line))}
       </div>`;
@@ -556,7 +566,8 @@ window.Views = (function(){
       `<div class="card no-print"><div class="filter-body">
         <div class="field"><label>Obra</label>${obraPicker()}</div>
         <div class="field"><label>Contrato</label>${contratoPicker('b-contrato')}</div>
-        <div class="field"><label>Período da medição</label><input type="month" id="b-periodo" value="${periodo}"></div>
+        <div class="field"><label>Tipo de medição</label><select id="b-modo"><option value="PERIODICO"${modo==='PERIODICO'?' selected':''}>Periódica</option><option value="ENCERRAMENTO"${modo==='ENCERRAMENTO'?' selected':''}>Encerramento</option></select></div>
+        <div class="field"${modo==='ENCERRAMENTO'?' style="display:none"':''}><label>Período da medição</label><input type="month" id="b-periodo" value="${periodo}"></div>
       </div></div>${body}`;
   }
 

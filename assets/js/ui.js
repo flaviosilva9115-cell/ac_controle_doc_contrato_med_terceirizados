@@ -86,7 +86,10 @@ window.UI = (function(){
     if((route==='config'||route==='sienge') && !Auth.isAdmin()){ location.hash='#/dashboard'; return; }
     setActive(route);
     const host=document.getElementById('main-content'); if(!host) return;
-    try{ window.Views.render(route, param, sub, host); bindFilters(); }
+    try{
+      window.Views.render(route, param, sub, host); bindFilters();
+      if(route==='contratos' && param && param!=='new') window.Views.bindDocsContrato(param);
+    }
     catch(e){ host.innerHTML='<div class="card"><div class="empty">Erro: '+esc(e.message)+'</div></div>'; console.error(e); }
   }
 

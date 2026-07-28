@@ -93,30 +93,43 @@ window.Logic = (function(){
   function habilitacao(tipoContratoId){ // Suprimentos (CNDs/licenças) — informativo, NÃO bloqueia
     return docsDoTipo(tipoContratoId).filter(d=>d.fase==='ATIVACAO' && nivel(d)==='EMPRESA' && d.setor==='SUPRIMENTOS');
   }
+  function checklistEncerramento(tipoContratoId){ // DP — documentos de encerramento
+    return docsDoTipo(tipoContratoId).filter(d=>d.fase==='ENCERRAMENTO' && nivel(d)==='EMPRESA' && d.setor!=='SUPRIMENTOS' && d.apresentacaoObrigatoria!==false);
+  }
   function contratoVigente(contrato){ return !contrato.dataTermino || daysUntil(contrato.dataTermino)>=0; }
-  function avaliaMedicao(contrato, periodo, docs, colaboradores){
-    const per=checklistPeriodico(contrato.tipoContratoId).map(td=>{
-      const inst=findInst(docs, td.id, contrato.id, null, periodo);
-      const sit=situacao(inst, td); const st=(inst&&inst.statusAprovacao)||'VAZIO';
-      return {td, inst, sit, st, ok: st==='APROVADO'};
-    });
+  function avaliaMedicao(contrato, periodo, docs, colaboradores, modo){
+    modo = modo || 'PERIODICO';
     const hab=habilitacao(contrato.tipoContratoId).map(td=>{
       const inst=findInst(docs, td.id, contrato.id, null, null);
       const sit=situacao(inst, td); const st=(inst&&inst.statusAprovacao)||'VAZIO';
       return {td, inst, sit, st, ok: st==='APROVADO'}; // informativo (não bloqueia)
     });
+    if(modo==='ENCERRAMENTO'){
+      const enc=checklistEncerramento(contrato.tipoContratoId).map(td=>{
+        const inst=findInst(docs, td.id, contrato.id, null, null);
+        const sit=situacao(inst, td); const st=(inst&&inst.statusAprovacao)||'VAZIO';
+        return {td, inst, sit, st, ok: st==='APROVADO'};
+      });
+      const liberado = enc.length>0 && enc.every(x=>x.ok);
+      return {modo, encerramento:enc, periodicos:[], habilitacao:hab, colabs:[], pendEntrada:[], entradaOk:true, vigente:true, liberado};
+    }
+    const per=checklistPeriodico(contrato.tipoContratoId).map(td=>{
+      const inst=findInst(docs, td.id, contrato.id, null, periodo);
+      const sit=situacao(inst, td); const st=(inst&&inst.statusAprovacao)||'VAZIO';
+      return {td, inst, sit, st, ok: st==='APROVADO'};
+    });
     const colabs=(colaboradores||[]).filter(cl=>cl.contratoId===contrato.id);
     const pendEntrada=colabs.filter(cl=>!avaliaColaborador(cl, contrato, docs).liberado);
     const entradaOk = pendEntrada.length===0;
     const vigente = contratoVigente(contrato);
-    const perOk = per.every(x=>x.ok);
+    const perOk = per.every(x=>x.ok) && per.length>0;
     const liberado = perOk && entradaOk && vigente;
-    return {periodicos:per, habilitacao:hab, colabs, pendEntrada, entradaOk, vigente, perOk, liberado};
+    return {modo, periodicos:per, encerramento:[], habilitacao:hab, colabs, pendEntrada, entradaOk, vigente, perOk, liberado};
   }
 
   // consolida status do contrato (para a lista de contratos)
   function statusContrato(contrato, docs){
-    const req=docsDoTipo(contrato.tipoContratoId).filter(d=>nivel(d)==='EMPRESA' && d.fase!=='PERIODICO' && d.apresentacaoObrigatoria!==false);
+    const req=docsDoTipo(contrato.tipoContratoId).filter(d=>d.setor==='SUPRIMENTOS');
     let apro=0, venc=0;
     req.forEach(td=>{
       const inst=findInst(docs, td.id, contrato.id, null, null);
@@ -140,7 +153,7 @@ window.Logic = (function(){
     daysUntil, fmtDate, nivel, aba, docsDoTipo,
     situacao, statusInfo, STATUS, findInst,
     checklistColaborador, avaliaColaborador,
-    checklistPeriodico, habilitacao, avaliaMedicao, statusContrato, contratoVigente,
+    checklistPeriodico, habilitacao, checklistEncerramento, avaliaMedicao, statusContrato, contratoVigente,
     periodoStatus, periodoAberto
   };
 })();

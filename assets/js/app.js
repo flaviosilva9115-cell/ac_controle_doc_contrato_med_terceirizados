@@ -41,11 +41,6 @@
   }
   function route(){
     UI.router();
-    // binds da subtela "Documentos do Contrato"
-    const parts=(location.hash.replace(/^#\/?/,'')||'').split('/');
-    if(parts[0]==='contratos' && parts[1] && parts[1]!=='new'){
-      Views.bindDocsContrato(parts[1]);
-    }
   }
 
   // ---------- DADOS DE EXEMPLO ----------

@@ -14,6 +14,16 @@ window.Cat = (function(){
     }
   }
   const tiposContrato = ()=>Store.all('tiposContrato');
+  // Migração única: documentos de SUPRIMENTOS deixam de ter validade/apresentação
+  // obrigatórias por padrão — o usuário passa a marcar manualmente. Roda uma vez.
+  function migrateSuprimentos(){
+    const db=Store.raw(); db.meta=db.meta||{};
+    if(db.meta.migSupr) return;
+    Store.all('tiposDocumento').forEach(d=>{
+      if(d.setor==='SUPRIMENTOS'){ d.validadeObrigatoria=false; d.apresentacaoObrigatoria=false; Store.upsert('tiposDocumento',d); }
+    });
+    db.meta.migSupr=true; Store.save();
+  }
   const tiposDocumento = ()=>Store.all('tiposDocumento');
   const contratoNome = id => (tiposContrato().find(c=>c.id===id)||{}).nome || id;
   function byId(id){ return tiposDocumento().find(d=>d.id===id)||null; }
@@ -22,5 +32,5 @@ window.Cat = (function(){
     while(ids.indexOf('tc'+String(n).padStart(2,'0'))>=0) n++; return 'tc'+String(n).padStart(2,'0'); }
   function nextTdId(){ let n=1; const ids=tiposDocumento().map(d=>d.id);
     while(ids.indexOf('td'+String(n).padStart(2,'0'))>=0) n++; return 'td'+String(n).padStart(2,'0'); }
-  return { ensureSeed, tiposContrato, tiposDocumento, contratoNome, byId, docsDoTipo, nextTcId, nextTdId };
+  return { ensureSeed, migrateSuprimentos, tiposContrato, tiposDocumento, contratoNome, byId, docsDoTipo, nextTcId, nextTdId };
 })();

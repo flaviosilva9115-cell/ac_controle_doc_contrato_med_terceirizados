@@ -87,9 +87,21 @@
     });
   }
 
+  async function pullSiengeImport(){
+    const cfg=getCfg(), token=getToken();
+    if(!cfg.owner||!cfg.repo||!token) throw new Error('Configure o GitHub (owner, repo e token) em Configurações → Banco & Sincronização.');
+    const path=cfg.siengePath||'sienge-import.json';
+    const url=`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}?ref=${cfg.branch||'main'}`;
+    const res=await fetch(url,{ headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'} });
+    if(res.status===404) throw new Error('sienge-import.json ainda não existe no repositório — rode a Action "Sincronizar Sienge" primeiro.');
+    if(!res.ok) throw new Error('GitHub '+res.status+': '+(await res.text()).slice(0,160));
+    const j=await res.json();
+    return JSON.parse(b64decode(j.content));
+  }
+
   window.Store = {
     uid, save, reset, all, get, upsert, remove, where,
     exportJSON, importJSON, raw:()=>db,
-    getCfg, setCfg, getToken, setToken, pull, push
+    getCfg, setCfg, getToken, setToken, pull, push, pullSiengeImport
   };
 })();

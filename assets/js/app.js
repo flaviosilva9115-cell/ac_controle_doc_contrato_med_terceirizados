@@ -76,5 +76,6 @@
   }};
 
   Cat.ensureSeed();
+  Cat.migrateSuprimentos();
   renderLogin();
 })();

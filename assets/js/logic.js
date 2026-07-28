@@ -68,7 +68,7 @@ window.Logic = (function(){
   // ---- PORTÃO ENTRADA (colaborador) ----
   // libera se todos os docs COLABORADOR-level exigidos estão APROVADO e não vencidos
   function checklistColaborador(tipoContratoId){
-    return docsDoTipo(tipoContratoId).filter(d=>nivel(d)==='COLABORADOR');
+    return docsDoTipo(tipoContratoId).filter(d=>nivel(d)==='COLABORADOR' && d.apresentacaoObrigatoria!==false);
   }
   function avaliaColaborador(colab, contrato, docs){
     const lista=checklistColaborador(contrato.tipoContratoId).map(td=>{
@@ -83,13 +83,18 @@ window.Logic = (function(){
   }
 
   // ---- PORTÃO MEDIÇÃO (contrato + período) ----
+  // Regra: documentos de SUPRIMENTOS NÃO bloqueiam o pagamento. Bloqueiam apenas
+  // os periódicos de DP/SESMT. Além disso, para validar o período o contrato não
+  // pode ter pendência na liberação de entrada no canteiro (colaboradores).
   function checklistPeriodico(tipoContratoId){
-    return docsDoTipo(tipoContratoId).filter(d=>d.fase==='PERIODICO' && nivel(d)==='EMPRESA');
+    return docsDoTipo(tipoContratoId).filter(d=>d.fase==='PERIODICO' && nivel(d)==='EMPRESA'
+      && d.setor!=='SUPRIMENTOS' && d.apresentacaoObrigatoria!==false);
   }
-  function habilitacao(tipoContratoId){ // CNDs/licenças com validade (ativação empresa)
-    return docsDoTipo(tipoContratoId).filter(d=>d.fase==='ATIVACAO' && nivel(d)==='EMPRESA' && d.validadeObrigatoria);
+  function habilitacao(tipoContratoId){ // Suprimentos (CNDs/licenças) — informativo, NÃO bloqueia
+    return docsDoTipo(tipoContratoId).filter(d=>d.fase==='ATIVACAO' && nivel(d)==='EMPRESA' && d.setor==='SUPRIMENTOS');
   }
-  function avaliaMedicao(contrato, periodo, docs){
+  function contratoVigente(contrato){ return !contrato.dataTermino || daysUntil(contrato.dataTermino)>=0; }
+  function avaliaMedicao(contrato, periodo, docs, colaboradores){
     const per=checklistPeriodico(contrato.tipoContratoId).map(td=>{
       const inst=findInst(docs, td.id, contrato.id, null, periodo);
       const sit=situacao(inst, td); const st=(inst&&inst.statusAprovacao)||'VAZIO';
@@ -98,15 +103,20 @@ window.Logic = (function(){
     const hab=habilitacao(contrato.tipoContratoId).map(td=>{
       const inst=findInst(docs, td.id, contrato.id, null, null);
       const sit=situacao(inst, td); const st=(inst&&inst.statusAprovacao)||'VAZIO';
-      return {td, inst, sit, st, ok: st==='APROVADO' && sit.key!=='VENCIDO'};
+      return {td, inst, sit, st, ok: st==='APROVADO'}; // informativo (não bloqueia)
     });
-    const liberado = per.every(x=>x.ok) && hab.every(x=>x.ok) && (per.length+hab.length)>0;
-    return {periodicos:per, habilitacao:hab, liberado};
+    const colabs=(colaboradores||[]).filter(cl=>cl.contratoId===contrato.id);
+    const pendEntrada=colabs.filter(cl=>!avaliaColaborador(cl, contrato, docs).liberado);
+    const entradaOk = pendEntrada.length===0;
+    const vigente = contratoVigente(contrato);
+    const perOk = per.every(x=>x.ok);
+    const liberado = perOk && entradaOk && vigente;
+    return {periodicos:per, habilitacao:hab, colabs, pendEntrada, entradaOk, vigente, perOk, liberado};
   }
 
   // consolida status do contrato (para a lista de contratos)
   function statusContrato(contrato, docs){
-    const req=docsDoTipo(contrato.tipoContratoId).filter(d=>nivel(d)==='EMPRESA' && d.fase!=='PERIODICO');
+    const req=docsDoTipo(contrato.tipoContratoId).filter(d=>nivel(d)==='EMPRESA' && d.fase!=='PERIODICO' && d.apresentacaoObrigatoria!==false);
     let apro=0, venc=0;
     req.forEach(td=>{
       const inst=findInst(docs, td.id, contrato.id, null, null);
@@ -114,8 +124,7 @@ window.Logic = (function(){
       if(st==='APROVADO') apro++;
       if(sit.key==='VENCIDO') venc++;
     });
-    const total=req.length||1;
-    const pct=Math.round(apro/total*100);
+    const pct = req.length===0 ? 100 : Math.round(apro/req.length*100);
     return {total:req.length, aprovados:apro, vencidos:venc, pct};
   }
 
@@ -131,7 +140,7 @@ window.Logic = (function(){
     daysUntil, fmtDate, nivel, aba, docsDoTipo,
     situacao, statusInfo, STATUS, findInst,
     checklistColaborador, avaliaColaborador,
-    checklistPeriodico, habilitacao, avaliaMedicao, statusContrato,
+    checklistPeriodico, habilitacao, avaliaMedicao, statusContrato, contratoVigente,
     periodoStatus, periodoAberto
   };
 })();

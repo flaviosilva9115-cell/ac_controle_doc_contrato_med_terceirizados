@@ -79,3 +79,18 @@ O login agora aceita **e-mail ou usuário**. Padrão inicial: `admin` / `admin` 
 - **Boletim de Medição** deixa claro que os documentos periódicos **anexados e validados no período** entram automaticamente; mostra quem inseriu e o status do período.
 - Botão **"Aprovar todos (empresa)"** na tela de Documentos do Contrato — marca a documentação da empresa como **Completa** mesmo com pendências.
 - Colaborador só é **liberado para entrada** quando todos os seus documentos estão anexados, válidos e **aprovados** pelo setor responsável (SESMT/DP).
+
+## Novidades v4
+
+- **Painel Geral por criticidade**: blocos separados em 🔴 Crítico (vencidos, medições bloqueadas, impedidos de entrar), 🟡 Atenção (a vencer, liberados) e ⚪ Visão geral.
+- **Documentos de Suprimentos**: passam a vir **sem validade e sem obrigatoriedade** por padrão — você marca manualmente o que precisa em Configurações → Tipos de Documento.
+- **Regra do Boletim de Medição**: documentos de **Suprimentos não bloqueiam** o pagamento (com o contrato vigente e aprovado). Bloqueiam apenas os periódicos de **DP/SESMT**, e o período só é validado se **não houver pendência na liberação de entrada no canteiro**.
+- **Rodapé** com os créditos e direitos reservados à Amorim Coutinho em todas as telas.
+- **Boletins de Liberação**: agora com quadros de **Aprovados** e **Aguardando liberação**, e uma tabela com CT, fornecedor, obra, período e status — com busca e filtro por status.
+
+> Os arquivos usam versionamento (`?v=4`) para forçar o navegador a baixar sempre a versão mais nova.
+
+## Novidades v5 — Integração Sienge
+
+- Novo menu **Importar do Sienge**: lê o arquivo `sienge-import.json` (gerado por uma GitHub Action no repositório privado) e permite **escolher** quais fornecedores, obras e contratos gravar no painel. Medições aparecem como informação.
+- A integração em si (Action + script) fica no repositório privado — veja o pacote `sienge-integration` e o `SETUP-SIENGE.md`.

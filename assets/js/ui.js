@@ -16,6 +16,7 @@ window.UI = (function(){
     {r:'obras', ic:'🏗️', lbl:'Obras'},
     {r:'terceirizadas', ic:'🏢', lbl:'Terceirizadas'},
     {r:'contratos', ic:'📄', lbl:'Contratos'},
+    {r:'sienge', ic:'🔗', lbl:'Importar do Sienge'},
     {sep:'LIBERAÇÃO'},
     {r:'boletins', ic:'✅', lbl:'Boletins'},
     {r:'periodos', ic:'📅', lbl:'Períodos'},
@@ -55,7 +56,8 @@ window.UI = (function(){
       <div class="layout">
         <nav class="sidebar" id="sidebar"></nav>
         <main class="main" id="main-content"></main>
-      </div>`;
+      </div>
+      <footer class="app-foot">Painel de Controle de Documentos de Terceirizadas · Desenvolvido por <b>Facten Suprimentos</b> · Todos os direitos reservados a <b>Amorim Coutinho</b> © 2026</footer>`;
     const sb=document.getElementById('sidebar');
     sb.innerHTML=NAV.map(n=> n.sep
       ? `<div class="nav-sep">${n.sep}</div>`

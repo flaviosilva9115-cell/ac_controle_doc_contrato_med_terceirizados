@@ -7,7 +7,7 @@ window.Views = (function(){
 
   function render(route, param, sub, host){
     const fn = ({
-      dashboard, obras, terceirizadas, contratos, boletins, periodos, config
+      dashboard, obras, terceirizadas, contratos, sienge, boletins, periodos, config
     })[route] || dashboard;
     host.innerHTML = fn(param, sub);
     if(after[route]) after[route](param, sub);
@@ -26,7 +26,7 @@ window.Views = (function(){
     contr.forEach(c=>{
       const st=Logic.statusContrato(c, docs);
       aprovados+=st.aprovados; totalReq+=st.total; venc+=st.vencidos;
-      const m=Logic.avaliaMedicao(c, periodoAtual(), docs);
+      const m=Logic.avaliaMedicao(c, periodoAtual(), docs, Store.all('colaboradores'));
       if(!m.liberado) medBloq++;
     });
     docs.forEach(d=>{ const td=Logic.byId(d.tipoDocumentoId); if(!td)return;
@@ -37,25 +37,31 @@ window.Views = (function(){
     const pct=totalReq?Math.round(aprovados/totalReq*100):0;
 
     const kpi=(v,l,cls)=>`<div class="kpi ${cls}"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+    const sec=(t,cls)=>`<div class="dash-sec ${cls||''}">${t}</div>`;
     return UI.pageHead('📊','Painel Geral','')+
+      sec('🔴 Crítico — exige ação','crit')+
       `<div class="kpis">
-        ${kpi(obras.length,'Obras','')}
-        ${kpi(forn.length,'Terceirizadas','')}
-        ${kpi(contr.length,'Contratos ativos','k-red')}
         ${kpi(venc,'Documentos vencidos','k-err')}
-        ${kpi(aVencer,'A vencer (30 dias)','k-warn')}
         ${kpi(medBloq,'Medições bloqueadas','k-err')}
-      </div>
-      <div class="card"><div class="card-title">Conformidade documental (empresa)</div>
+        ${kpi(entrBloq,'Impedidos de entrar no canteiro','k-err')}
+      </div>`+
+      sec('🟡 Atenção','warn')+
+      `<div class="kpis">
+        ${kpi(aVencer,'Documentos a vencer (30 dias)','k-warn')}
+        ${kpi(entrTot-entrBloq,'Liberados para entrada','k-ok')}
+      </div>`+
+      `<div class="card"><div class="card-title">Conformidade documental (empresa)</div>
         <div style="padding:16px 18px">
           <div style="display:flex;justify-content:space-between;font-size:13px"><span>${aprovados} de ${totalReq} documentos aprovados</span><b>${pct}%</b></div>
           <div class="bar"><i style="width:${pct}%;background:${pct>=80?'var(--ok)':pct>=50?'var(--warn)':'var(--err)'}"></i></div>
         </div>
-      </div>
-      <div class="kpis">
+      </div>`+
+      sec('⚪ Visão geral','')+
+      `<div class="kpis">
+        ${kpi(obras.length,'Obras','')}
+        ${kpi(forn.length,'Terceirizadas','')}
+        ${kpi(contr.length,'Contratos ativos','k-red')}
         ${kpi(entrTot,'Colaboradores cadastrados','')}
-        ${kpi(entrBloq,'Impedidos de entrar no canteiro','k-err')}
-        ${kpi(entrTot-entrBloq,'Liberados para entrada','k-ok')}
       </div>`;
   }
   function periodoAtual(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
@@ -417,20 +423,53 @@ window.Views = (function(){
   function boletins(param){
     if(param==='entrada') return boletimEntrada();
     if(param==='medicao') return boletimMedicao();
+    const periodo=periodoAtual();
+    const contr=Auth.filterContratos(Store.all('contratos'));
+    const docs=Store.all('documentos'), colabAll=Store.all('colaboradores');
+    const bl=[]; let aprov=0, aguard=0;
+    contr.forEach(c=>{
+      const f=Store.get('fornecedores',c.fornecedorId)||{}, o=Store.get('obras',c.obraId)||{};
+      const colabs=colabAll.filter(cl=>cl.contratoId===c.id);
+      const entLib = colabs.length>0 && colabs.every(cl=>Logic.avaliaColaborador(cl,c,docs).liberado);
+      const entSt = colabs.length===0?{l:'Sem colaboradores',cls:'b-muted',k:'-'}:(entLib?{l:'Aprovado',cls:'b-ok',k:'ap'}:{l:'Aguardando',cls:'b-warn',k:'ag'});
+      bl.push({tipo:'🚧 Entrada', c, f, o, per:'—', st:entSt, link:'#/boletins/entrada'});
+      const m=Logic.avaliaMedicao(c, periodo, docs, colabAll);
+      const medSt = m.liberado?{l:'Aprovado',cls:'b-ok',k:'ap'}:{l:'Aguardando',cls:'b-warn',k:'ag'};
+      bl.push({tipo:'💰 Medição', c, f, o, per:periodo, st:medSt, link:'#/boletins/medicao'});
+    });
+    bl.forEach(r=>{ if(r.st.k==='ap')aprov++; else if(r.st.k==='ag')aguard++; });
+    const kpi=(v,l,cls)=>`<div class="kpi ${cls}"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+    const rowB=r=>`<tr data-status="${r.st.k}">
+      <td>${r.tipo}</td><td class="num">${E(r.c.numero)}</td>
+      <td>${E(r.f.fantasia||r.f.razao||'—')}</td><td>${E(r.o.nome||'—')}</td>
+      <td>${E(r.per)}</td><td>${B(r.st.l,r.st.cls)}</td>
+      <td style="text-align:right"><button class="icon-act view" data-openb="${r.link}" data-cid="${r.c.id}" title="Abrir boletim">↗</button></td></tr>`;
     return UI.pageHead('✅','Boletins de Liberação','')+
-      `<div class="kpis">
-        <div class="card" style="padding:22px;cursor:pointer" id="go-entrada">
-          <div style="font-size:32px">🚧</div><h3 style="margin:8px 0 4px">Boletim de Entrada no Canteiro</h3>
-          <div class="help">Situação de cada colaborador e seus documentos. Libera ou bloqueia a entrada na obra.</div></div>
-        <div class="card" style="padding:22px;cursor:pointer" id="go-medicao">
-          <div style="font-size:32px">💰</div><h3 style="margin:8px 0 4px">Boletim de Medição</h3>
-          <div class="help">Documentos periódicos do mês + habilitação da empresa. Libera ou bloqueia o pagamento.</div></div>
-      </div>`;
+      `<div class="dash-sec">Tipos de boletins</div>
+      <div class="kpis">
+        <div class="card" style="padding:20px;cursor:pointer" id="go-entrada">
+          <div style="font-size:30px">🚧</div><h3 style="margin:6px 0 4px">Boletim de Entrada no Canteiro</h3>
+          <div class="help">Situação de cada colaborador. Libera ou bloqueia a entrada na obra.</div></div>
+        <div class="card" style="padding:20px;cursor:pointer" id="go-medicao">
+          <div style="font-size:30px">💰</div><h3 style="margin:6px 0 4px">Boletim de Medição</h3>
+          <div class="help">Periódicos DP/SESMT + entrada liberada. Libera ou bloqueia o pagamento.</div></div>
+      </div>
+      <div class="dash-sec">Resumo dos boletins (período ${E(periodo)})</div>
+      <div class="kpis">${kpi(aprov,'Boletins aprovados','k-ok')}${kpi(aguard,'Aguardando liberação','k-warn')}</div>
+      <div class="card"><div class="card-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <span>Boletins por contrato</span>
+        <span style="display:flex;gap:8px">
+          <input class="flt" data-filter-tbl="#tbl-bol" placeholder="🔎 CT, fornecedor ou obra...">
+          <select class="flt" style="min-width:150px" data-filter-tbl="#tbl-bol" data-col="status"><option value="">Todos</option><option value="ap">Aprovados</option><option value="ag">Aguardando</option></select>
+        </span>
+      </div>
+      ${UI.table(['Tipo','CT','Fornecedor','Obra','Período','Status','Abrir'], bl.map(rowB), 'tbl-bol')}</div>`;
   }
   after.boletins=(param)=>{
     if(!param){
       document.getElementById('go-entrada').onclick=()=>location.hash='#/boletins/entrada';
       document.getElementById('go-medicao').onclick=()=>location.hash='#/boletins/medicao';
+      document.querySelectorAll('[data-openb]').forEach(b=>b.onclick=()=>{ window.__bcontrato=b.dataset.cid; window.__bperiodo=null; location.hash=b.dataset.openb; });
       return;
     }
     const ob=document.getElementById('b-obra');
@@ -486,20 +525,29 @@ window.Views = (function(){
     let body='<div class="card"><div class="empty">Selecione um contrato para gerar o boletim.</div></div>';
     if(c){
       const f=Store.get('fornecedores',c.fornecedorId)||{}, o=Store.get('obras',c.obraId)||{}, docs=Store.all('documentos');
-      const m=Logic.avaliaMedicao(c, periodo, docs);
+      const m=Logic.avaliaMedicao(c, periodo, docs, Store.all('colaboradores'));
       const pstatus=Logic.periodoStatus(periodo);
       const line=x=>`<tr><td>${E(x.td.documento)}</td>
         <td>${x.inst&&x.inst.validade?Logic.fmtDate(x.inst.validade):'—'}</td>
         <td>${x.inst&&x.inst.inseridoPor?E(x.inst.inseridoPor):'—'}</td>
         <td>${B(x.sit.label,x.sit.cls)}</td><td>${B(Logic.statusInfo(x.st).label,Logic.statusInfo(x.st).cls)}</td></tr>`;
+      const colabLinha=cl=>{ const av=Logic.avaliaColaborador(cl,c,docs);
+        return `<tr><td>${E(cl.nome)}</td><td>${E(cl.funcao||'—')}</td><td>${av.liberado?B('Liberado','b-ok'):B('Pendente','b-err')}</td></tr>`; };
       body=`<div class="boletim">
         <h2>Boletim de Medição</h2>
         <div class="bsub">${E(f.razao||'')} · Obra: ${E(o.nome||'')} · Contrato ${E(c.numero)} · Período ${E(periodo)} ${pstatus==='FECHADO'?'(fechado)':'(aberto)'} · Emitido em ${new Date().toLocaleDateString('pt-BR')}</div>
         <div class="verdict ${m.liberado?'go':'no'}">${m.liberado?'✅ PAGAMENTO LIBERADO':'⛔ PAGAMENTO BLOQUEADO'}</div>
-        <div class="help" style="margin:8px 0 14px">Os documentos periódicos <b>anexados e validados para ${E(periodo)}</b> entram automaticamente neste boletim. A medição só é liberada quando todos estão <b>Aprovados</b> e a habilitação da empresa (CNDs/licenças) está válida.</div>
-        <h3 style="margin:16px 0 4px">Documentos periódicos do período (${E(periodo)})</h3>
+        <div class="help" style="margin:8px 0 14px">Regra: documentos de <b>Suprimentos não bloqueiam</b> o pagamento (contrato vigente e aprovado). Bloqueiam apenas os <b>periódicos de DP/SESMT</b>. O período só é validado se <b>não houver pendência na liberação de entrada no canteiro</b>.</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          ${m.vigente?B('Contrato vigente','b-ok'):B('Contrato fora de vigência','b-err')}
+          ${m.perOk?B('Documentos periódicos OK','b-ok'):B('Periódicos pendentes','b-err')}
+          ${m.entradaOk?B('Entrada no canteiro liberada','b-ok'):B(m.pendEntrada.length+' colaborador(es) com pendência','b-err')}
+        </div>
+        <h3 style="margin:16px 0 4px">Documentos periódicos do período — DP/SESMT (${E(periodo)})</h3>
         ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.periodicos.map(line))}
-        <h3 style="margin:16px 0 4px">Habilitação da empresa (CNDs / licenças)</h3>
+        <h3 style="margin:16px 0 4px">Liberação de entrada no canteiro (colaboradores)</h3>
+        ${UI.table(['Colaborador','Função','Entrada'], m.colabs.map(colabLinha))}
+        <h3 style="margin:16px 0 4px">Suprimentos — habilitação (informativo, não bloqueia)</h3>
         ${UI.table(['Documento','Validade','Inserido por','Situação','Status'], m.habilitacao.map(line))}
       </div>`;
     }
@@ -757,6 +805,76 @@ window.Views = (function(){
     document.getElementById('g-pull').onclick=async()=>{ try{ await Store.pull(); UI.toast('Baixado ✓'); UI.router(); }catch(e){ UI.toast(e.message); } };
     document.getElementById('g-push').onclick=async()=>{ try{ await Store.push(); UI.toast('Enviado ✓'); }catch(e){ UI.toast(e.message); } };
     function v(id){ return document.getElementById(id).value.trim(); }
+  }
+
+  /* ---------------- IMPORTAR DO SIENGE ---------------- */
+  function sienge(){
+    const pool=window.__siengePool;
+    const head=UI.pageHead('🔗','Importar do Sienge','<button class="btn btn-dark" id="s-fetch">⟳ Buscar do Sienge</button>');
+    if(!pool) return head+
+      `<div class="card"><div class="empty">Clique em "Buscar do Sienge" para carregar credores, obras, contratos e medições.</div></div>
+       <div class="help card" style="padding:14px 18px">Requer o GitHub conectado (Configurações → Banco &amp; Sincronização) e a Action <b>Sincronizar Sienge</b> configurada no repositório privado, que gera o arquivo <span class="code">sienge-import.json</span>.</div>`;
+    const chk=(cls,i)=>`<input type="checkbox" class="${cls}" value="${i}">`;
+    const fRows=(pool.fornecedores||[]).map((x,i)=>`<tr><td>${chk('s-f',i)}</td><td>${E(x.cnpj||'—')}</td><td>${E(x.razao||'')}</td><td>${E(x.fantasia||'')}</td><td>${jaTem('fornecedores','cnpj',x.cnpj)?B('Já existe','b-muted'):''}</td></tr>`);
+    const oRows=(pool.obras||[]).map((x,i)=>`<tr><td>${chk('s-o',i)}</td><td>${E(x.codigo||'—')}</td><td>${E(x.nome||'')}</td><td>${jaTem('obras','codigo',x.codigo)?B('Já existe','b-muted'):''}</td></tr>`);
+    const tipos=Cat.tiposContrato();
+    const cRows=(pool.contratos||[]).map((x,i)=>{
+      const fn2=(pool.fornecedores||[]).find(f=>f.siengeId===x.fornecedorSiengeId)||{};
+      const ob=(pool.obras||[]).find(o=>o.siengeId===x.obraSiengeId)||{};
+      return `<tr><td>${chk('s-c',i)}</td><td class="num">${E(x.numero)}</td><td>${E((x.objeto||'').slice(0,36))}</td>
+        <td>${E(fn2.fantasia||fn2.razao||x.fornecedorSiengeId||'—')}</td><td>${E(ob.nome||x.obraSiengeId||'—')}</td>
+        <td><select class="s-ctipo" data-i="${i}"><option value="">— tipo —</option>${UI.option(tipos,'id','nome')}</select></td>
+        <td>${jaTem('contratos','numero',x.numero)?B('Já existe','b-muted'):''}</td></tr>`;
+    });
+    const mRows=(pool.medicoes||[]).map(x=>{ const c=(pool.contratos||[]).find(k=>k.siengeId===x.contratoSiengeId)||{};
+      return `<tr><td>${E(c.numero||x.contratoSiengeId||'—')}</td><td>${E(x.numero||'—')}</td><td>${E(x.competencia||'—')}</td><td>${x.valor!=null?'R$ '+Number(x.valor).toLocaleString('pt-BR'):'—'}</td><td>${E(x.situacao||'—')}</td></tr>`;
+    });
+    return head+
+      `<div class="help card" style="padding:12px 16px">Sincronizado em <b>${E(pool.geradoEm||'—')}</b>. Marque o que deseja gravar e importe. Importe <b>fornecedores e obras primeiro</b>, depois os contratos (cada contrato precisa de um <b>tipo</b> para gerar o checklist).</div>
+      <div class="card"><div class="card-title" style="justify-content:space-between"><span>Fornecedores (credores) — ${(pool.fornecedores||[]).length}</span><button class="btn btn-sm btn-primary" id="imp-f">Importar selecionados</button></div>
+        ${UI.table(['☑','CNPJ','Razão Social','Fantasia',''], fRows,'tbl-sf')}</div>
+      <div class="card"><div class="card-title" style="justify-content:space-between"><span>Obras — ${(pool.obras||[]).length}</span><button class="btn btn-sm btn-primary" id="imp-o">Importar selecionados</button></div>
+        ${UI.table(['☑','Código','Nome',''], oRows,'tbl-so')}</div>
+      <div class="card"><div class="card-title" style="justify-content:space-between"><span>Contratos — ${(pool.contratos||[]).length}</span><button class="btn btn-sm btn-primary" id="imp-c">Importar selecionados</button></div>
+        ${UI.table(['☑','Número','Objeto','Fornecedor','Obra','Tipo (define checklist)',''], cRows,'tbl-sc')}</div>
+      <div class="card"><div class="card-title">Medições — ${(pool.medicoes||[]).length} (informativo)</div>
+        ${UI.table(['Contrato','Nº','Competência','Valor','Situação'], mRows,'tbl-sm')}</div>`;
+  }
+  function jaTem(coll,campo,val){ return val && Store.all(coll).some(x=>x[campo]===val); }
+  after.sienge=()=>{
+    const fb=document.getElementById('s-fetch');
+    if(fb) fb.onclick=async()=>{ try{ UI.toast('Buscando do Sienge...'); window.__siengePool=await Store.pullSiengeImport(); UI.router(); }catch(e){ UI.toast(e.message); } };
+    if(!window.__siengePool) return;
+    const impf=document.getElementById('imp-f'); if(impf) impf.onclick=()=>importSienge('f');
+    const impo=document.getElementById('imp-o'); if(impo) impo.onclick=()=>importSienge('o');
+    const impc=document.getElementById('imp-c'); if(impc) impc.onclick=()=>importSienge('c');
+  };
+  function checkedIdx(cls){ return [].slice.call(document.querySelectorAll('.'+cls+':checked')).map(x=>+x.value); }
+  function importSienge(kind){
+    const pool=window.__siengePool; if(!pool) return;
+    if(kind==='f'){ let n=0; checkedIdx('s-f').forEach(i=>{ const x=pool.fornecedores[i]; if(!x)return;
+        const ex=Store.all('fornecedores').find(f=>(x.siengeId!=null&&f.siengeId===x.siengeId)||(x.cnpj&&f.cnpj===x.cnpj));
+        Store.upsert('fornecedores',Object.assign(ex||{},{siengeId:x.siengeId,cnpj:x.cnpj,razao:x.razao,fantasia:x.fantasia,ativo:true})); n++; });
+      UI.toast(n+' fornecedor(es) importado(s) ✓'); UI.router(); return; }
+    if(kind==='o'){ let n=0; checkedIdx('s-o').forEach(i=>{ const x=pool.obras[i]; if(!x)return;
+        const ex=Store.all('obras').find(o=>(x.siengeId!=null&&o.siengeId===x.siengeId)||(x.codigo&&o.codigo===x.codigo));
+        Store.upsert('obras',Object.assign(ex||{},{siengeId:x.siengeId,codigo:x.codigo,nome:x.nome})); n++; });
+      UI.toast(n+' obra(s) importada(s) ✓'); UI.router(); return; }
+    // contratos
+    let n=0, semTipo=0, semDep=0;
+    checkedIdx('s-c').forEach(i=>{ const x=pool.contratos[i]; if(!x)return;
+      const tSel=document.querySelector('.s-ctipo[data-i="'+i+'"]'); const tipo=tSel?tSel.value:'';
+      if(!tipo){ semTipo++; return; }
+      const forn=Store.all('fornecedores').find(f=>f.siengeId===x.fornecedorSiengeId);
+      const obra=Store.all('obras').find(o=>o.siengeId===x.obraSiengeId);
+      if(!forn||!obra){ semDep++; return; }
+      const ex=Store.all('contratos').find(c=>(x.siengeId!=null&&c.siengeId===x.siengeId)||c.numero===x.numero);
+      Store.upsert('contratos',Object.assign(ex||{},{siengeId:x.siengeId,numero:x.numero,objeto:x.objeto,
+        fornecedorId:forn.id,obraId:obra.id,tipoContratoId:tipo,dataInicio:x.dataInicio,dataTermino:x.dataTermino,controleDoc:true,ativo:true})); n++; });
+    let msg=n+' contrato(s) importado(s) ✓';
+    if(semTipo) msg+=' · '+semTipo+' sem tipo';
+    if(semDep) msg+=' · '+semDep+' sem fornecedor/obra importados';
+    UI.toast(msg); UI.router();
   }
 
   return { render, bindDocsContrato };

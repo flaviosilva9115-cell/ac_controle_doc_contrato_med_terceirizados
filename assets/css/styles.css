@@ -129,6 +129,10 @@ table.tbl .num{color:var(--ac-red);font-weight:700}
 
 /* ---------- DASHBOARD ---------- */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:18px}
+.dash-sec{font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:6px 0 10px}
+.dash-sec.crit{color:var(--err)} .dash-sec.warn{color:#8a6608}
+.app-foot{padding:16px 26px;text-align:center;font-size:11.5px;color:var(--muted);border-top:1px solid var(--line);margin-top:8px}
+.app-foot b{color:var(--ac-red)}
 .kpi{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;border-left:4px solid var(--ac-gray)}
 .kpi.k-red{border-left-color:var(--ac-red)} .kpi.k-ok{border-left-color:var(--ok)}
 .kpi.k-warn{border-left-color:var(--warn)} .kpi.k-err{border-left-color:var(--err)}

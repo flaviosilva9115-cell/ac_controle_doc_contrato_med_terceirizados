@@ -28,6 +28,11 @@
   function save(){
     db.meta.updatedAt = new Date().toISOString();
     localStorage.setItem(LS_KEY, JSON.stringify(db));
+    if(_server){
+      clearTimeout(_pushTimer);
+      _pushTimer=setTimeout(()=>{ apiPush().catch(()=>{}); }, 2000);
+      return;
+    }
     const cfg=getCfg();
     if(cfg.autoSync && cfg.owner && cfg.repo && getToken()){
       clearTimeout(_pushTimer);
@@ -108,9 +113,38 @@
     return JSON.parse(b64decode(j.content));
   }
 
+  // ---- MODO SERVIDOR (Cloudflare Pages Functions + Access) ----
+  let _server=false;
+  const isServer=()=>_server;
+  const setServerMode=b=>{ _server=!!b; };
+  async function whoami(){
+    try{ const r=await fetch('/api/whoami',{headers:{'Accept':'application/json'}});
+      if(!r.ok) return null; const j=await r.json(); return (j&&j.email)?j:null;
+    }catch(e){ return null; }
+  }
+  async function apiPull(){
+    const r=await fetch('/api/db',{headers:{'Accept':'application/json'}});
+    if(!r.ok) throw new Error('API /db '+r.status);
+    const j=await r.json(); if(j && !j.error && Object.keys(j).length) db=Object.assign(emptyDB(), j); save();
+  }
+  async function apiPush(){
+    const r=await fetch('/api/db',{method:'PUT',headers:{'Content-Type':'application/json'},body:exportJSON()});
+    if(!r.ok) throw new Error('API /db '+r.status);
+  }
+  async function apiSienge(){
+    const r=await fetch('/api/sienge',{headers:{'Accept':'application/json'}});
+    if(r.status===404) throw new Error('sienge-import.json ainda não existe — rode a Action de sincronização.');
+    if(!r.ok) throw new Error('API /sienge '+r.status);
+    return r.json();
+  }
+
   window.Store = {
     uid, save, reset, all, get, upsert, remove, where,
     exportJSON, importJSON, raw:()=>db,
-    getCfg, setCfg, getToken, setToken, pull, push, pullSiengeImport
+    getCfg, setCfg, getToken, setToken,
+    isServer, setServerMode, whoami,
+    pull: (...a)=> _server ? apiPull() : pull(...a),
+    push: (...a)=> _server ? apiPush() : push(...a),
+    pullSiengeImport: (...a)=> _server ? apiSienge() : pullSiengeImport(...a)
   };
 })();

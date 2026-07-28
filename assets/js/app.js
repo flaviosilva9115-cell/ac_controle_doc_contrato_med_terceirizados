@@ -75,9 +75,29 @@
       Store.upsert('documentos',{tipoDocumentoId:hab.id,contratoId:c.id,entregue:true,statusAprovacao:'APROVADO',validade:'2024-12-31',inseridoPor:'admin',inseridoEm:new Date().toISOString()});
   }};
 
+  async function autoLoginServer(email){
+    let u=Store.all('usuarios').find(x=>(x.email||'').toLowerCase()===email.toLowerCase());
+    if(!u){
+      const temAdminReal=Store.all('usuarios').some(x=>x.admin===true && x.email);
+      if(!temAdminReal){
+        u=Store.upsert('usuarios',{nome:email.split('@')[0], email, login:email, senha:'', perfil:'GESTOR', admin:true, obras:'all'});
+      } else {
+        u=Store.upsert('usuarios',{nome:email.split('@')[0], email, login:email, senha:'', perfil:'COMPRADOR', admin:false, obras:[]});
+      }
+    }
+    window.__user=u; start(u);
+    if(!u.admin && (!Array.isArray(u.obras) || u.obras.length===0)) UI.toast('Seu acesso foi criado. Aguarde um administrador liberar suas obras.');
+  }
   Cat.ensureSeed();
   Cat.migrateSuprimentos();
   (async function boot(){
+    const who=await Store.whoami();
+    if(who && who.email){
+      Store.setServerMode(true);
+      try{ await Store.pull(); }catch(e){ /* segue com dados locais */ }
+      Cat.ensureSeed(); Cat.migrateSuprimentos();
+      return autoLoginServer(who.email);
+    }
     const cfg=Store.getCfg();
     if(cfg.owner && cfg.repo && Store.getToken()){
       try{ await Store.pull(); }catch(e){ /* segue com dados locais */ }

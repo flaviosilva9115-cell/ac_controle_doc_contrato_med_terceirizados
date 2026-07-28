@@ -769,6 +769,12 @@ window.Views = (function(){
   /* Banco & Sincronização */
   function cfgBanco(){
     const cfg=Store.getCfg();
+    if(Store.isServer()) return `<div class="card"><div class="card-title">Banco de dados</div>
+      <div style="padding:16px 18px" class="help">Neste ambiente (<b>Cloudflare + Access</b>) a sincronização é <b>automática e gerenciada pelo servidor</b> — a equipe entra pelo e-mail autorizado e não precisa configurar token. Cada alteração é salva no repositório privado.</div>
+      <div class="filter-body">
+        <div class="field"><button class="btn" id="exp">⬇ Exportar JSON</button></div>
+        <div class="field"><button class="btn btn-dark" id="g-pull">⬇ Recarregar do servidor</button></div>
+      </div></div>`;
     return `<div class="card"><div class="card-title">Banco de dados</div>
         <div style="padding:16px 18px" class="help">O banco é um arquivo JSON. Por padrão fica salvo <b>neste navegador</b>. Sincronize de graça com um <span class="code">db.json</span> em um repositório privado do GitHub (banco compartilhado).</div>
         <div class="filter-body">
@@ -798,21 +804,22 @@ window.Views = (function(){
       </div>`;
   }
   function bindBanco(){
-    document.getElementById('exp').onclick=()=>{ const blob=new Blob([Store.exportJSON()],{type:'application/json'});
-      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='db.json'; a.click(); };
-    document.getElementById('imp').onclick=()=>document.getElementById('impf').click();
-    document.getElementById('impf').onchange=e=>{ const fr=new FileReader();
+    const on=(id,fn,ev)=>{ const el=document.getElementById(id); if(el) el[ev||'onclick']=fn; };
+    on('exp',()=>{ const blob=new Blob([Store.exportJSON()],{type:'application/json'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='db.json'; a.click(); });
+    on('imp',()=>document.getElementById('impf').click());
+    on('impf',e=>{ const fr=new FileReader();
       fr.onload=()=>{ try{ Store.importJSON(fr.result); UI.toast('Importado ✓'); UI.router(); }catch(err){ UI.toast('Erro: '+err.message); } };
-      fr.readAsText(e.target.files[0]); };
-    document.getElementById('seedbtn').onclick=()=>{ window.Seed&&window.Seed.demo(); UI.toast('Dados de exemplo carregados ✓'); UI.router(); };
-    document.getElementById('rst').onclick=()=>{ if(confirm('Isso apaga todos os dados locais. Continuar?')){ Store.reset(); location.reload(); }};
-    document.getElementById('g-save').onclick=()=>{
+      fr.readAsText(e.target.files[0]); },'onchange');
+    on('seedbtn',()=>{ window.Seed&&window.Seed.demo(); UI.toast('Dados de exemplo carregados ✓'); UI.router(); });
+    on('rst',()=>{ if(confirm('Isso apaga todos os dados locais. Continuar?')){ Store.reset(); location.reload(); }});
+    on('g-save',()=>{
       const remember=document.getElementById('g-remember').checked;
       Store.setCfg(Object.assign(Store.getCfg(),{owner:v('g-owner'),repo:v('g-repo'),branch:v('g-branch')||'main',path:v('g-path')||'db.json',remember,autoSync:document.getElementById('g-auto').checked}));
-      Store.setToken(v('g-tok'), remember); UI.toast('Config salva ✓'); };
-    document.getElementById('g-pull').onclick=async()=>{ try{ await Store.pull(); UI.toast('Baixado ✓'); UI.router(); }catch(e){ UI.toast(e.message); } };
-    document.getElementById('g-push').onclick=async()=>{ try{ await Store.push(); UI.toast('Enviado ✓'); }catch(e){ UI.toast(e.message); } };
-    function v(id){ return document.getElementById(id).value.trim(); }
+      Store.setToken(v('g-tok'), remember); UI.toast('Config salva ✓'); });
+    on('g-pull',async()=>{ try{ await Store.pull(); UI.toast('Recarregado ✓'); UI.router(); }catch(e){ UI.toast(e.message); } });
+    on('g-push',async()=>{ try{ await Store.push(); UI.toast('Enviado ✓'); }catch(e){ UI.toast(e.message); } });
+    function v(id){ const el=document.getElementById(id); return el?el.value.trim():''; }
   }
 
   /* ---------------- IMPORTAR DO SIENGE ---------------- */

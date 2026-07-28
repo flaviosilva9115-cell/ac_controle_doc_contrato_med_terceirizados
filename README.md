@@ -101,3 +101,11 @@ O login agora aceita **e-mail ou usuário**. Padrão inicial: `admin` / `admin` 
 - **Lembrar token neste dispositivo** (Configurações → Banco & Sincronização): em um computador confiável, o token fica salvo e não precisa ser digitado a cada sessão.
 - **Auto-sincronizar alterações**: quando ligado, o painel envia as mudanças ao GitHub automaticamente.
 - **Carregamento automático**: em dispositivos configurados (com token lembrado), o painel já baixa os dados compartilhados ao abrir — a equipe não precisa preencher nada, só fazer login.
+
+## Novidades v7 — Modo servidor (Cloudflare Pages + Access)
+
+- O painel agora funciona em **dois modos**, detectados automaticamente:
+  - **GitHub Pages (modo token)**: como antes — sincroniza com o repo privado usando um token no navegador.
+  - **Cloudflare Pages + Access (modo servidor)**: a equipe entra **só com o e-mail** (Cloudflare Access), **sem digitar token**. As **Functions** em `functions/api/` guardam o token do GitHub no servidor.
+- Login automático pelo e-mail do Access; o primeiro a entrar vira **administrador**. Os demais são criados como usuários comuns, e o admin libera as obras deles.
+- Passo a passo completo em **CLOUDFLARE-SETUP.md**.

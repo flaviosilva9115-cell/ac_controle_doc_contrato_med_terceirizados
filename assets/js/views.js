@@ -543,6 +543,9 @@ window.Views = (function(){
     UI.modal(`<div class="m-head"><h3>Anexar documento</h3><button class="x-close" onclick="UI.close()">×</button></div>
       <div class="m-body">
         <div class="field full"><label>Documento</label><input value="${E(td.documento)}" disabled></div>
+        ${Store.isServer&&Store.isServer()?`<div class="field full"><label>Enviar arquivo para o Google Drive</label>
+          <div id="a-dz" class="dropzone">📎 Arraste o arquivo aqui ou clique para selecionar<input type="file" id="a-file" style="display:none"></div>
+          <div id="a-upmsg" class="help" style="margin-top:6px"></div></div>`:''}
         <div class="field full"><label>Link do anexo (Google Drive / URL)</label><input id="a-url" value="${E(inst.anexoUrl||'')}" placeholder="https://drive.google.com/..."></div>
         ${td.validadeObrigatoria?`<div class="field"><label>Validade *</label><input type="date" id="a-val" value="${E(inst.validade||'')}"></div>`:''}
         <div class="field"><label>Status</label><select id="a-st">
@@ -551,6 +554,31 @@ window.Views = (function(){
       </div>
       <div class="m-foot"><button class="btn" onclick="UI.close()">Cancelar</button>
         <button class="btn btn-primary" id="save">Salvar</button></div>`);
+    if(Store.isServer&&Store.isServer()){
+      const dz=document.getElementById('a-dz'), fi=document.getElementById('a-file'), msg=document.getElementById('a-upmsg');
+      const forn=Store.get('fornecedores', c.fornecedorId)||{};
+      const faseLabel=({ATIVACAO:'Ativação',PERIODICO:'Periódico',ENCERRAMENTO:'Encerramento'})[td&&td.fase]||'Documentos';
+      const doUp=async(file)=>{
+        if(!file) return;
+        msg.style.color=''; msg.textContent='⏳ Enviando "'+file.name+'"…';
+        try{
+          const ext=(file.name.match(/\.[^.]+$/)||[''])[0];
+          const base=String((td&&td.documento)||file.name).replace(/[\/\\]/g,'-').slice(0,80);
+          const nome=(ext && !base.toLowerCase().endsWith(ext.toLowerCase()))?base+ext:base;
+          const up=await Store.uploadToDrive(file,{ credor:(forn.fantasia||forn.razao||'Sem credor'), contrato:('CT '+(c.numero||c.id)), tipo:faseLabel, nome });
+          document.getElementById('a-url').value=up.url;
+          msg.innerHTML='✅ Enviado ao Drive — <a href="'+E(up.url)+'" target="_blank">abrir arquivo</a>';
+          UI.toast('Arquivo enviado ao Drive ✓');
+        }catch(e){ msg.style.color='var(--err)'; msg.textContent='Falha no envio: '+e.message; }
+      };
+      if(dz){
+        dz.onclick=()=>fi.click();
+        fi.onchange=()=>doUp(fi.files[0]);
+        ['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{ e.preventDefault(); dz.classList.add('drag'); }));
+        dz.addEventListener('dragleave',e=>{ e.preventDefault(); dz.classList.remove('drag'); });
+        dz.addEventListener('drop',e=>{ e.preventDefault(); dz.classList.remove('drag'); const f=e.dataTransfer.files[0]; if(f) doUp(f); });
+      }
+    }
     document.getElementById('save').onclick=()=>{
       const val=document.getElementById('a-val');
       if(td.validadeObrigatoria && val && !val.value) return UI.toast('Informe a validade.');

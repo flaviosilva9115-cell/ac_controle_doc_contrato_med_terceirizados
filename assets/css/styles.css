@@ -231,3 +231,9 @@ table.tbl .num{color:var(--ac-red);font-weight:700}
 
 .click-row{cursor:pointer}
 .click-row:hover{background:#fbecec !important}
+
+/* v12 — dropzone de upload (Google Drive) */
+.dropzone{border:2px dashed var(--line);border-radius:10px;padding:22px 14px;text-align:center;
+  color:var(--muted);font-size:13px;cursor:pointer;background:#fafafb;transition:.12s}
+.dropzone:hover{border-color:var(--ac-gray);background:#f4f4f6}
+.dropzone.drag{border-color:var(--ac-red);background:#fbecec;color:var(--ac-red)}

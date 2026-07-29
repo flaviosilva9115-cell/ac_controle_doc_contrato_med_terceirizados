@@ -1,0 +1,13 @@
+{
+  "name": "ac-controledoc-terceirizadas",
+  "private": true,
+  "version": "12.0.0",
+  "description": "Painel de Controle de Documentos de Terceirizadas — Amorim Coutinho. App estático (GitHub Pages) OU com backend (Cloudflare Pages + Access + Google Drive).",
+  "scripts": {
+    "dev": "wrangler pages dev .",
+    "deploy": "wrangler pages deploy . --project-name ac-controledoc-terceirizadas --commit-dirty=true"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

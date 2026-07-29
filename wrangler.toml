@@ -1,0 +1,7 @@
+name = "ac-controledoc-terceirizadas"
+pages_build_output_dir = "."
+compatibility_date = "2024-11-01"
+
+# As Functions ficam em /functions e são compiladas automaticamente pelo Wrangler.
+# NÃO coloque segredos aqui — eles vão em "Environment variables / Secrets" do
+# projeto no Cloudflare (ou via: npx wrangler pages secret put NOME).

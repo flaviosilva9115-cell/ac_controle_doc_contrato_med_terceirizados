@@ -1,67 +1,97 @@
-# Caminho B — Cloudflare Pages + Access (equipe entra só com e-mail)
+# Backend do painel — Cloudflare Pages + Access + Google Drive
 
-Com isto, a equipe acessa o painel **só com o e-mail** (recebe um código), **ninguém digita token**, e os dados continuam **privados**. Um "porteiro" (Cloudflare Access) controla quem entra, e umas Functions no servidor guardam o token do GitHub.
+Este guia liga o **modo servidor** do painel:
 
-```
-Pessoa → Cloudflare Access (login por e-mail) → Painel (Cloudflare Pages) → Functions (guardam o token) → repo privado (db.json)
-```
+- **Login por e-mail** (Cloudflare Access) — a equipe entra só com o e-mail, sem token, sem senha.
+- **Banco compartilhado** — o `db.json` fica num repositório **privado** do GitHub; o token de acesso mora no servidor (Cloudflare), nunca no navegador.
+- **Anexos no Google Drive** — ao arrastar um arquivo no painel, uma Function envia direto ao Drive na estrutura `raiz / credor / contrato / tipo(fase)` usando uma **service account** (sem o usuário configurar nada).
 
-O mesmo código funciona nos dois lugares: no Cloudflare (modo servidor, login por e-mail) e no GitHub Pages (modo token, como antes). Ele detecta sozinho onde está.
+O **mesmo código** roda nos dois modos: no GitHub Pages ele funciona no modo estático (token no dispositivo); publicado no Cloudflare Pages, ele detecta o servidor sozinho (via `/api/whoami`) e passa a login por e-mail + upload ao Drive.
+
+> Free tier: Cloudflare Access é gratuito até **50 usuários**.
+
+---
 
 ## Pré-requisitos
+- Node.js instalado (para rodar o `npx wrangler`).
+- Conta Google (Google Cloud) e conta Cloudflare (com Zero Trust habilitado — é grátis).
+- O repositório **privado** do banco já criado (ex.: `ac_controledoc_db`) e um **token fine-grained** do GitHub com permissão **Contents: Read and write** nele.
 
-- O repositório **público** do painel (o `ac_controledoc_terceirizadas`), já com a pasta `functions/` (vem no pacote v7).
-- O repositório **privado** do banco (`ac_controledoc_db`), onde ficam `db.json` e `sienge-import.json`.
-- Um **token fine-grained** com **Contents: Read and write** no repositório privado (pode reusar o que você já criou, ou criar um novo só para o Cloudflare).
+---
 
-## Passo 1 — Publicar no Cloudflare Pages
+## Passo 1 — Service account no Google Cloud
+1. Acesse https://console.cloud.google.com e crie (ou escolha) um projeto.
+2. **APIs & Services → Library →** procure **Google Drive API →** *Enable*.
+3. **APIs & Services → Credentials → Create credentials → Service account.** Dê um nome (ex.: `painel-terceirizadas`) e crie.
+4. Abra a service account criada → aba **Keys → Add key → Create new key → JSON.** Baixe o arquivo `.json`.
+5. Desse JSON você vai usar dois campos:
+   - `client_email`  → vira a variável **GOOGLE_SA_EMAIL**
+   - `private_key`   → vira a variável **GOOGLE_SA_PRIVATE_KEY** (o texto inteiro, com `-----BEGIN PRIVATE KEY-----` … `-----END PRIVATE KEY-----`)
 
-1. Crie uma conta grátis em cloudflare.com.
-2. No painel do Cloudflare: **Workers & Pages → Create → Pages → Connect to Git**.
-3. Autorize o GitHub e escolha o repositório **público** do painel.
-4. Build settings: **Framework preset: None**, **Build command: (vazio)**, **Build output directory: `/`**. Salvar e implantar.
-5. Ao final, você recebe uma URL tipo `https://ac-controledoc.pages.dev`. As Functions em `functions/api/*` já funcionam automaticamente.
+## Passo 2 — Pasta raiz no Google Drive
+1. No seu Google Drive, crie uma pasta (ex.: **"Documentos Terceirizadas"**).
+2. **Compartilhe** essa pasta com o **client_email** da service account, como **Editor**.
+   - Dica: se usar um **Shared Drive**, adicione a service account como membro **Content manager** — funciona igual (o código já usa `supportsAllDrives`).
+3. Abra a pasta e copie o **ID** que aparece na URL:
+   `https://drive.google.com/drive/folders/`**`ESTE_ID`** → vira **GDRIVE_ROOT_FOLDER_ID**.
 
-## Passo 2 — Variáveis de ambiente (o token do servidor)
+## Passo 3 — Publicar no Cloudflare Pages (Wrangler CLI)
+> Use o Wrangler CLI (upload direto). **Não** use o "drag-drop" do dashboard novo — ele cria um *Worker* e as Functions/variáveis não funcionam.
 
-No projeto Pages: **Settings → Environment variables → Production** → adicione:
+Na pasta do projeto:
+```bash
+npx wrangler login
+npx wrangler pages project create ac-controledoc-terceirizadas --production-branch main
+npx wrangler pages deploy .
+```
+Ao final, anote a URL gerada: `https://ac-controledoc-terceirizadas.pages.dev`.
 
-| Nome | Valor | Tipo |
+## Passo 4 — Variáveis e segredos no Cloudflare
+No painel do Cloudflare: **Workers & Pages → ac-controledoc-terceirizadas → Settings → Variables and Secrets** (ou via CLI, abaixo). Cadastre:
+
+| Nome | Tipo | Valor |
 |---|---|---|
-| `GITHUB_TOKEN` | seu token fine-grained | **Encrypt/Secret** |
-| `GH_OWNER` | `flaviosilva9115-cell` | texto |
-| `GH_REPO` | `ac_controledoc_db` | texto |
-| `GH_BRANCH` | `main` | texto |
-| `GH_PATH` | `db.json` | texto |
-| `SIENGE_PATH` | `sienge-import.json` | texto |
+| `GITHUB_TOKEN` | **Secret** | token fine-grained (Contents R/W) do repo privado do banco |
+| `GH_OWNER` | Texto | seu usuário/org do GitHub |
+| `GH_REPO` | Texto | nome do repo privado do banco (ex.: `ac_controledoc_db`) |
+| `GH_BRANCH` | Texto | `main` |
+| `GH_PATH` | Texto | `db.json` |
+| `SIENGE_PATH` | Texto | `sienge-import.json` |
+| `GOOGLE_SA_EMAIL` | Texto | `client_email` do JSON |
+| `GOOGLE_SA_PRIVATE_KEY` | **Secret** | `private_key` do JSON (texto inteiro) |
+| `GDRIVE_ROOT_FOLDER_ID` | Texto | ID da pasta raiz do Passo 2 |
+| `GDRIVE_PUBLIC_LINKS` | Texto | `0` (padrão) ou `1` para gerar link "qualquer pessoa com o link" |
 
-Depois de salvar, faça um novo deploy (Deployments → Retry deployment) para as variáveis valerem.
+Pelo CLI, os segredos podem ir assim (cole o valor quando pedir):
+```bash
+npx wrangler pages secret put GITHUB_TOKEN
+npx wrangler pages secret put GOOGLE_SA_PRIVATE_KEY
+```
+> A chave privada pode ser colada com quebras de linha reais **ou** com `\n` — o código trata os dois casos.
 
-## Passo 3 — Ligar o Cloudflare Access (o porteiro) — OBRIGATÓRIO
+Depois de cadastrar as variáveis, **rode `npx wrangler pages deploy .` de novo** para elas entrarem em vigor.
 
-Sem isto, as Functions ficam abertas na internet. Faça antes de compartilhar a URL.
+## Passo 5 — LIGAR o Cloudflare Access (obrigatório)
+Sem isso, `/api/whoami` volta vazio e qualquer pessoa acessaria o painel.
+1. **Zero Trust → Access → Applications → Add an application → Self-hosted.**
+2. Domínio: a URL do Pages (`ac-controledoc-terceirizadas.pages.dev`) ou seu domínio próprio.
+3. **Policy:** *Allow* → por e-mails específicos ou por domínio de e-mail da empresa (ex.: `@amorimcoutinho.com.br`).
+4. Método de login: Google/One-time PIN.
+5. Salve. A partir daí, abrir o painel pede o e-mail e valida pelo Access.
 
-1. No Cloudflare: **Zero Trust** (aceite o plano **Free**, até 50 usuários).
-2. **Access → Applications → Add an application → Self-hosted**.
-3. **Application domain**: o domínio do seu Pages (`ac-controledoc.pages.dev`).
-4. **Identity / login methods**: deixe **One-time PIN** ligado (login por e-mail, sem precisar de Google/Microsoft).
-5. **Policies → Add a policy**:
-   - Nome: `Equipe`.
-   - Action: **Allow**.
-   - Include → **Emails** → liste os e-mails autorizados (o seu e o da equipe). *(Dá para usar "Emails ending in @suaempresa.com" se todos tiverem o mesmo domínio.)*
-6. Salvar. A partir daí, só esses e-mails entram — cada um digitando o próprio e-mail e o código recebido.
+## Passo 6 — Primeiro acesso
+- O **primeiro e-mail** que entrar vira **admin** automaticamente (bootstrap).
+- Os demais entram como usuários comuns **sem obras** — o admin libera as obras de cada um em **Configurações → Usuários**.
 
-## Passo 4 — Primeiro acesso
+---
 
-1. Abra a URL do Pages, entre com **o seu e-mail**. Como você é o primeiro, o painel te cria **como administrador** automaticamente.
-2. Para cada colega: **(a)** adicione o e-mail dele na política do Access (Passo 3) e **(b)** quando ele entrar pela primeira vez, ele é criado como usuário comum sem obras — então você vai em **Configurações → Usuários**, abre o usuário dele e libera as **obras** (e marca "Administrador" se for o caso).
-3. Compartilhe **só a URL do Cloudflare** com a equipe. Pode até desligar o GitHub Pages, se quiser.
+## Como funciona o upload ao Drive
+- Ao anexar um documento (botão **＋** na tela *Documentos do Contrato*), no modo servidor aparece uma área **"Arraste o arquivo aqui"**.
+- O arquivo é enviado à Function `/api/upload`, que cria (se não existir) a estrutura de pastas **`raiz / <credor> / CT <número> / <fase>`** e faz o upload.
+- O **link** do arquivo volta preenchido no campo do anexo e é salvo junto do documento.
+- Se `GDRIVE_PUBLIC_LINKS=1`, o link fica acessível a qualquer pessoa que o tenha; com `0` (padrão), só quem tem acesso à pasta abre.
 
-## Como funciona por baixo
-
-- `functions/api/whoami.js` — devolve o e-mail que o Access autenticou; o painel usa para logar sozinho.
-- `functions/api/db.js` — lê/grava o `db.json` no repo privado usando o `GITHUB_TOKEN` do servidor.
-- `functions/api/sienge.js` — lê o `sienge-import.json`.
-- O token **nunca** chega ao navegador; fica só nas variáveis do Cloudflare.
-
-> Segurança: mantenha o Access ligado no domínio inteiro (inclui `/api/*`). Sem Access, qualquer pessoa com a URL acessaria os dados.
+## Observações honestas
+- Este backend **não pôde ser testado contra o Google/Cloudflare reais** aqui (sem credenciais/rede). O código foi validado em sintaxe e lógica; pode precisar de **1 pequeno ajuste no 1º run** (ex.: formato da chave privada ou permissão da pasta). As Functions retornam a mensagem de erro do Google/GitHub em JSON, o que facilita o diagnóstico.
+- A service account precisa **mesmo** ter acesso de edição à pasta raiz (Passo 2), senão o upload falha com erro de permissão.
+- Continua valendo o modo estático (GitHub Pages) como alternativa: lá não há upload automático ao Drive; usa-se o campo de link manual.

@@ -137,12 +137,27 @@
     if(!r.ok) throw new Error('API /sienge '+r.status);
     return r.json();
   }
+  // upload de anexo ao Google Drive (via Function com service account) — só no modo servidor
+  async function uploadToDrive(file, meta){
+    if(!_server) throw new Error('Upload ao Drive disponível apenas no modo servidor (Cloudflare Pages + Access).');
+    meta=meta||{};
+    const fd=new FormData();
+    fd.append('file', file);
+    fd.append('credor', meta.credor||'');
+    fd.append('contrato', meta.contrato||'');
+    fd.append('tipo', meta.tipo||'');
+    fd.append('nome', meta.nome||file.name||'documento');
+    const r=await fetch('/api/upload',{ method:'POST', body:fd });
+    let j={}; try{ j=await r.json(); }catch(e){}
+    if(!r.ok || j.error) throw new Error(j.error || ('upload '+r.status));
+    return j; // { id, name, url }
+  }
 
   window.Store = {
     uid, save, reset, all, get, upsert, remove, where,
     exportJSON, importJSON, raw:()=>db,
     getCfg, setCfg, getToken, setToken,
-    isServer, setServerMode, whoami,
+    isServer, setServerMode, whoami, uploadToDrive,
     pull: (...a)=> _server ? apiPull() : pull(...a),
     push: (...a)=> _server ? apiPush() : push(...a),
     pullSiengeImport: (...a)=> _server ? apiSienge() : pullSiengeImport(...a)

@@ -7,7 +7,7 @@ window.Views = (function(){
 
   function render(route, param, sub, host){
     const fn = ({
-      dashboard, obras, terceirizadas, apoio, contratos, sienge, boletins, periodos, config
+      dashboard, obra, obras, terceirizadas, apoio, contratos, sienge, boletins, periodos, config
     })[route] || dashboard;
     host.innerHTML = fn(param, sub);
     if(after[route]) after[route](param, sub);
@@ -15,55 +15,220 @@ window.Views = (function(){
   const after={};
 
   /* ---------------- DASHBOARD ---------------- */
+  const CHART_COLORS=['#941616','#717172','#2f8fd6','#e0a90c','#2e9e5b','#8b5cf6','#c2410c','#0e7490'];
+
+  // estatísticas consolidadas de um conjunto de contratos
+  function statsFor(contr){
+    const docs=Store.all('documentos'), colAll=Store.all('colaboradores');
+    let venc=0, medBloq=0, entTot=0, entBloq=0, aprovados=0, totalReq=0;
+    contr.forEach(c=>{
+      const st=Logic.statusContrato(c,docs); aprovados+=st.aprovados; totalReq+=st.total; venc+=st.vencidos;
+      const m=Logic.avaliaMedicao(c, periodoAtual(), docs, colAll); if(!m.liberado) medBloq++;
+      colAll.filter(cl=>cl.contratoId===c.id).forEach(cl=>{ entTot++; if(!Logic.avaliaColaborador(cl,c,docs).liberado) entBloq++; });
+    });
+    const pct=totalReq?Math.round(aprovados/totalReq*100):100;
+    return {contratos:contr.length, venc, medBloq, entTot, entBloq, aprovados, totalReq, pct, pend:venc+medBloq+entBloq};
+  }
+
+  // ---- gráficos (SVG puro, sem dependências) ----
+  function svgDonut(items, center, centerLabel){
+    const total=items.reduce((a,b)=>a+b.value,0);
+    const r=54,cx=70,cy=70,C=2*Math.PI*r; let off=0;
+    const segs = total>0 ? items.map(it=>{
+      const len=(it.value/total)*C;
+      const s=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="20" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+      off+=len; return s;
+    }).join('') : `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#eceef0" stroke-width="20"/>`;
+    return `<svg viewBox="0 0 140 140" width="132" height="132" class="donut">${segs}
+      <text x="${cx}" y="${cy-1}" text-anchor="middle" font-size="26" font-weight="800" fill="#20232a">${center}</text>
+      <text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="9.5" fill="#6b7280">${E(centerLabel||'')}</text></svg>`;
+  }
+  function rankList(items){
+    if(!items.length) return '<div class="help" style="padding:8px 0">Sem dados para exibir.</div>';
+    return `<div class="rank-list">${items.map((it,i)=>`<div class="rank-row">
+      <span class="pos">${i+1}</span><span class="sw" style="background:${it.color}"></span>
+      <span class="nm">${E(it.label)}</span><b>${it.value}</b></div>`).join('')}</div>`;
+  }
+  function rankingCard(titulo, icon, items, metricLabel){
+    const top=items.slice(0,6);
+    const donutItems=top.map(x=>({value:x.value,color:x.color}));
+    const total=items.reduce((a,b)=>a+b.value,0);
+    return `<div class="card chart-card">
+      <div class="card-title">${icon} ${titulo}</div>
+      <div class="chart-body">
+        ${svgDonut(donutItems, total, metricLabel)}
+        ${rankList(top)}
+      </div></div>`;
+  }
+  function buildRanking(contr, keyId, nameFn){
+    const map={};
+    contr.forEach(c=>{ const s=statsFor([c]); const k=c[keyId]||'—';
+      (map[k]=map[k]||{contratos:0,pend:0}); map[k].contratos++; map[k].pend+=s.pend; });
+    const totalPend=Object.keys(map).reduce((a,k)=>a+map[k].pend,0);
+    const useMetric = totalPend>0 ? 'pend' : 'contratos';
+    let arr=Object.keys(map).map(k=>({id:k, label:nameFn(k), value:map[k][useMetric]}));
+    arr.sort((a,b)=>b.value-a.value);
+    arr=arr.filter(x=>x.value>0);
+    arr.forEach((x,i)=>x.color=CHART_COLORS[i%CHART_COLORS.length]);
+    return {arr, metric: useMetric==='pend'?'pendências':'contratos'};
+  }
+  function svgLineChart(labels, series){
+    const W=560,H=220,padL=32,padR=14,padT=16,padB=30;
+    let maxV=1; series.forEach(s=>s.points.forEach(v=>{ if(v>maxV)maxV=v; }));
+    const n=labels.length;
+    const X=i=> padL + (n<=1?0:i*(W-padL-padR)/(n-1));
+    const Y=v=> padT + (1 - v/maxV)*(H-padT-padB);
+    const grid=[0,0.5,1].map(f=>{ const v=Math.round(maxV*f); const yy=Y(v);
+      return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="#eceef0"/>
+        <text x="${padL-6}" y="${(yy+3).toFixed(1)}" text-anchor="end" font-size="9" fill="#9aa0a6">${v}</text>`; }).join('');
+    const lines=series.map(s=>{
+      const pts=s.points.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+      const dots=s.points.map((v,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="3" fill="${s.color}"/>`).join('');
+      return `<polyline fill="none" stroke="${s.color}" stroke-width="2.5" points="${pts}"/>${dots}`;
+    }).join('');
+    const xl=labels.map((l,i)=>`<text x="${X(i).toFixed(1)}" y="${H-9}" text-anchor="middle" font-size="9.5" fill="#6b7280">${E(l)}</text>`).join('');
+    const leg=series.map(s=>`<span class="lg"><span class="sw" style="background:${s.color}"></span>${E(s.name)}</span>`).join('');
+    return `<div class="card chart-card wide">
+      <div class="card-title">📈 Atividade documental (últimos 6 meses)</div>
+      <div class="chart-legend">${leg}</div>
+      <div style="padding:4px 8px 14px"><svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${grid}${lines}${xl}</svg></div>
+    </div>`;
+  }
+  function atividadeSeries(){
+    const docs=Store.all('documentos');
+    const now=new Date(); const keys=[], labels=[];
+    for(let i=5;i>=0;i--){ const d=new Date(now.getFullYear(), now.getMonth()-i, 1);
+      const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      keys.push(k); labels.push(String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getFullYear()).slice(2)); }
+    const ins=keys.map(()=>0), apr=keys.map(()=>0);
+    docs.forEach(x=>{ if(!x.inseridoEm)return; const k=String(x.inseridoEm).slice(0,7); const idx=keys.indexOf(k);
+      if(idx>=0){ ins[idx]++; if(x.statusAprovacao==='APROVADO') apr[idx]++; } });
+    return {labels, series:[{name:'Documentos inseridos',color:'#717172',points:ins},{name:'Documentos aprovados',color:'#2e9e5b',points:apr}]};
+  }
+
   function dashboard(){
     const obras=Auth.filterObras(Store.all('obras'));
     const forn=Store.all('fornecedores');
     const contr=Auth.filterContratos(Store.all('contratos'));
     const docs=Store.all('documentos');
-    const cIds=contr.map(c=>c.id);
-    const colab=Store.all('colaboradores').filter(cl=>cIds.indexOf(cl.contratoId)>=0);
-    let venc=0, aVencer=0, aprovados=0, totalReq=0, medBloq=0;
-    contr.forEach(c=>{
-      const st=Logic.statusContrato(c, docs);
-      aprovados+=st.aprovados; totalReq+=st.total; venc+=st.vencidos;
-      const m=Logic.avaliaMedicao(c, periodoAtual(), docs, Store.all('colaboradores'));
-      if(!m.liberado) medBloq++;
-    });
-    docs.forEach(d=>{ const td=Logic.byId(d.tipoDocumentoId); if(!td)return;
-      const s=Logic.situacao(d,td); if(s.key==='A_VENCER')aVencer++; });
-    let entrBloq=0, entrTot=0;
-    colab.forEach(cl=>{ const c=Store.get('contratos',cl.contratoId); if(!c)return;
-      entrTot++; if(!Logic.avaliaColaborador(cl,c,docs).liberado) entrBloq++; });
-    const pct=totalReq?Math.round(aprovados/totalReq*100):0;
+    const g=statsFor(contr);
+    let aVencer=0;
+    docs.forEach(d=>{ const td=Logic.byId(d.tipoDocumentoId); if(!td)return; const s=Logic.situacao(d,td); if(s.key==='A_VENCER')aVencer++; });
 
     const kpi=(v,l,cls)=>`<div class="kpi ${cls}"><div class="v">${v}</div><div class="l">${l}</div></div>`;
     const sec=(t,cls)=>`<div class="dash-sec ${cls||''}">${t}</div>`;
+    const fornName=id=>{ const f=forn.find(x=>x.id===id); return f?(f.fantasia||f.razao):'—'; };
+    const obraName=id=>{ const o=obras.find(x=>x.id===id)||Store.get('obras',id); return o?o.nome:'—'; };
+
+    // blocos por obra (clicáveis)
+    const blocos = obras.length ? obras.map(o=>{
+      const s=statsFor(contr.filter(c=>c.obraId===o.id));
+      const crit = s.pend>0;
+      return `<div class="obra-block ${crit?'crit':'ok'}" data-obra="${o.id}">
+        <div class="ob-head"><div class="ob-name">${E(o.nome)}</div>
+          <div class="ob-city">${E(o.codigo?('Cód. '+o.codigo+' · '):'')}${E(o.cidade||'')}</div></div>
+        <div class="ob-mini">
+          <div><b>${s.contratos}</b><span>Contratos</span></div>
+          <div class="${s.venc?'bad':''}"><b>${s.venc}</b><span>Vencidos</span></div>
+          <div class="${s.medBloq?'bad':''}"><b>${s.medBloq}</b><span>Med. bloq.</span></div>
+          <div class="${s.entBloq?'bad':''}"><b>${s.entBloq}</b><span>Impedidos</span></div>
+        </div>
+        <div class="ob-barwrap"><div class="ob-bar-l"><span>Conformidade</span><b>${s.pct}%</b></div>
+          <div class="bar"><i style="width:${s.pct}%;background:${s.pct>=80?'var(--ok)':s.pct>=50?'var(--warn)':'var(--err)'}"></i></div></div>
+        <div class="ob-open">Abrir obra →</div>
+      </div>`;
+    }).join('') : '<div class="card"><div class="empty">Nenhuma obra cadastrada.</div></div>';
+
+    // rankings + linha do tempo
+    const rF=buildRanking(contr,'fornecedorId',fornName);
+    const rO=buildRanking(contr,'obraId',obraName);
+    const at=atividadeSeries();
+
     return UI.pageHead('📊','Painel Geral','')+
       sec('🔴 Crítico — exige ação','crit')+
       `<div class="kpis">
-        ${kpi(venc,'Documentos vencidos','k-err')}
-        ${kpi(medBloq,'Medições bloqueadas','k-err')}
-        ${kpi(entrBloq,'Impedidos de entrar no canteiro','k-err')}
+        ${kpi(g.venc,'Documentos vencidos','k-err')}
+        ${kpi(g.medBloq,'Medições bloqueadas','k-err')}
+        ${kpi(g.entBloq,'Impedidos de entrar no canteiro','k-err')}
       </div>`+
       sec('🟡 Atenção','warn')+
       `<div class="kpis">
         ${kpi(aVencer,'Documentos a vencer (30 dias)','k-warn')}
-        ${kpi(entrTot-entrBloq,'Liberados para entrada','k-ok')}
+        ${kpi(g.entTot-g.entBloq,'Liberados para entrada','k-ok')}
       </div>`+
-      `<div class="card"><div class="card-title">Conformidade documental (empresa)</div>
-        <div style="padding:16px 18px">
-          <div style="display:flex;justify-content:space-between;font-size:13px"><span>${aprovados} de ${totalReq} documentos aprovados</span><b>${pct}%</b></div>
-          <div class="bar"><i style="width:${pct}%;background:${pct>=80?'var(--ok)':pct>=50?'var(--warn)':'var(--err)'}"></i></div>
-        </div>
+      sec('🏗️ Obras — clique para abrir')+
+      `<div class="obra-grid">${blocos}</div>`+
+      sec('📊 Indicadores e rankings')+
+      `<div class="chart-grid">
+        ${rankingCard('Ranking de fornecedores','🏢',rF.arr,'por '+rF.metric)}
+        ${rankingCard('Ranking de obras','🏗️',rO.arr,'por '+rO.metric)}
+        ${svgLineChart(at.labels, at.series)}
       </div>`+
       sec('⚪ Visão geral','')+
       `<div class="kpis">
         ${kpi(obras.length,'Obras','')}
         ${kpi(forn.length,'Terceirizadas','')}
         ${kpi(contr.length,'Contratos ativos','k-red')}
-        ${kpi(entrTot,'Colaboradores cadastrados','')}
+        ${kpi(g.entTot,'Colaboradores cadastrados','')}
       </div>`;
   }
+  after.dashboard=()=>{
+    document.querySelectorAll('.obra-block[data-obra]').forEach(b=>b.onclick=()=>{ location.hash='#/obra/'+b.dataset.obra; });
+  };
+
+  /* ---------------- OBRA (drill-down: obra -> terceirizadas -> contrato) ---------------- */
+  function obra(param){
+    const o=Store.get('obras',param);
+    if(!o || !Auth.canObra(o.id)) return UI.pageHead('🏗️','Obra','')+'<div class="card"><div class="empty">Obra não encontrada ou sem acesso.</div></div>';
+    const contr=Store.all('contratos').filter(c=>c.obraId===o.id);
+    const s=statsFor(contr);
+    const forn=Store.all('fornecedores'), docs=Store.all('documentos');
+    const kpi=(v,l,cls)=>`<div class="kpi ${cls}"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+
+    const byForn={};
+    contr.forEach(c=>{ (byForn[c.fornecedorId]=byForn[c.fornecedorId]||[]).push(c); });
+    const blocos = Object.keys(byForn).length ? Object.keys(byForn).map(fid=>{
+      const f=forn.find(x=>x.id===fid)||{};
+      const rows=byForn[fid].map(c=>{
+        const st=Logic.statusContrato(c,docs);
+        const sk = st.pct>=100?'completa': st.vencidos>0?'vencidos': st.pct>0?'parcial':'pendente';
+        const bd = sk==='completa'?B('Completa','b-ok'): sk==='vencidos'?B('Com vencidos','b-err'): sk==='parcial'?B(st.pct+'%','b-part'):B('Pendente','b-warn');
+        const m=Logic.avaliaMedicao(c, periodoAtual(), docs, Store.all('colaboradores'));
+        return `<tr class="click-row" data-openc="${c.id}">
+          <td class="num">${E(c.numero)}</td>
+          <td>${E((c.objeto||Logic.contratoNome(c.tipoContratoId)).slice(0,46))}</td>
+          <td>${E(Logic.contratoNome(c.tipoContratoId).slice(0,26))}</td>
+          <td>${bd}</td>
+          <td>${m.liberado?B('Medição liberada','b-ok'):B('Medição bloqueada','b-err')}</td>
+          <td style="text-align:right"><button class="icon-act view" data-openc="${c.id}" title="Situação integral do contrato">↗</button></td></tr>`;
+      });
+      return `<div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <span>🏢 ${E(f.fantasia||f.razao||'Terceirizada')}</span>
+          <span class="help">${E(f.cnpj||'')}</span></div>
+        ${UI.table(['Contrato','Objeto','Tipo','Status Docs','Medição','Abrir'], rows)}</div>`;
+    }).join('') : '<div class="card"><div class="empty">Nenhuma terceirizada com contrato nesta obra.</div></div>';
+
+    return UI.pageHead('🏗️', o.nome,
+      '<button class="btn" onclick="location.hash=\'#/dashboard\'">← Painel</button>')+
+      `<div class="entity-head"><div class="meta">
+        <div style="font-weight:800;font-size:15px">${E(o.nome)}</div>
+        <b>Código:</b> ${E(o.codigo||'—')} &nbsp;·&nbsp; <b>Cidade:</b> ${E(o.cidade||'—')} &nbsp;·&nbsp; <b>Terceirizadas:</b> ${Object.keys(byForn).length}</div>
+        <div class="pill-active" style="${s.pend>0?'background:var(--err)':''}">${s.pend>0?('⚠ '+s.pend+' pendência(s)'):'✓ Sem pendências'}</div></div>`+
+      `<div class="kpis">
+        ${kpi(s.contratos,'Contratos','k-red')}
+        ${kpi(s.venc,'Documentos vencidos','k-err')}
+        ${kpi(s.medBloq,'Medições bloqueadas','k-err')}
+        ${kpi(s.entBloq,'Impedidos de entrar','k-err')}
+        ${kpi(s.pct+'%','Conformidade','k-ok')}
+      </div>`+
+      `<div class="dash-sec">Terceirizadas na obra — clique no contrato para ver a situação integral</div>`+
+      blocos;
+  }
+  after.obra=()=>{
+    document.querySelectorAll('[data-openc]').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); location.hash='#/contratos/'+el.dataset.openc; });
+  };
+
   function periodoAtual(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 
   /* ---------------- OBRAS ---------------- */
@@ -251,7 +416,7 @@ window.Views = (function(){
   /* ------------- DOCUMENTOS DO CONTRATO (5 abas) ------------- */
   const TABS=[['ATIVACAO','Docs. Ativação'],['PERIODICO','Docs. Periódicos'],
     ['ENCERRAMENTO','Docs. Encerramento'],['TREINAMENTOS','Treinamentos/Certificados'],
-    ['COLABORADORES','Colaboradores']];
+    ['COLABORADORES','Colaboradores'],['HISTORICO','Histórico']];
   function docsContrato(id, tab){
     const c=Store.get('contratos',id); if(!c) return '<div class="card"><div class="empty">Contrato não encontrado.</div></div>';
     const f=Store.get('fornecedores',c.fornecedorId)||{}, o=Store.get('obras',c.obraId)||{};
@@ -260,6 +425,7 @@ window.Views = (function(){
     const req=Logic.docsDoTipo(c.tipoContratoId);
     const counts={}; TABS.forEach(t=>counts[t[0]]=0);
     req.forEach(d=>{ counts[Logic.aba(d)]=(counts[Logic.aba(d)]||0)+1; });
+    const hist=historicoEventos(c); counts['HISTORICO']=hist.length;
 
     const tabsHTML=`<div class="tabs">${TABS.map(([k,l])=>
       `<div class="tab ${k===tab?'active':''}" data-tab="${k}">📁 ${l} <span class="cnt">${counts[k]||0}</span></div>`).join('')}</div>`;
@@ -280,6 +446,7 @@ window.Views = (function(){
 
     let body;
     if(tab==='COLABORADORES') body=colaboradoresTab(c, docs);
+    else if(tab==='HISTORICO') body=historicoTab(c, hist);
     else body=docsTab(c, tab, docs);
 
     return UI.pageHead('📁','Documentos do Contrato',
@@ -437,6 +604,34 @@ window.Views = (function(){
     });
   }
 
+  /* ---------------- HISTÓRICO DO CONTRATO ---------------- */
+  function historicoEventos(c){
+    const docs=Store.all('documentos');
+    const colIds=Store.where('colaboradores',x=>x.contratoId===c.id).map(x=>x.id);
+    const evs=docs.filter(d=> d.inseridoEm && ((d.contratoId===c.id) || (d.colaboradorId && colIds.indexOf(d.colaboradorId)>=0)));
+    evs.sort((a,b)=> String(b.inseridoEm||'').localeCompare(String(a.inseridoEm||'')));
+    return evs;
+  }
+  function historicoTab(c, hist){
+    if(!hist.length) return '<div class="card"><div class="empty">Sem histórico de movimentações neste contrato ainda.</div></div>';
+    const colById={}; Store.where('colaboradores',x=>x.contratoId===c.id).forEach(x=>colById[x.id]=x);
+    const rows=hist.map(d=>{
+      const td=Logic.byId(d.tipoDocumentoId)||{documento:'—',setor:''};
+      const sit=Logic.situacao(d,td); const st=Logic.statusInfo(d.statusAprovacao||'VAZIO');
+      const alvo = d.colaboradorId ? ('👷 '+E((colById[d.colaboradorId]||{}).nome||'Colaborador')) : '🏢 Empresa';
+      const quando = d.inseridoEm ? new Date(d.inseridoEm).toLocaleString('pt-BR') : '—';
+      return `<tr>
+        <td style="white-space:nowrap">${quando}</td>
+        <td>${E(d.inseridoPor||'—')}</td>
+        <td>${E(td.documento)}<div style="font-size:11px;color:#9aa0a6">${E(td.setor||'')}${d.periodo?(' · '+E(d.periodo)):''}</div></td>
+        <td>${alvo}</td>
+        <td>${B(sit.label,sit.cls)}</td>
+        <td>${B(st.label,st.cls)}</td></tr>`;
+    });
+    return `<div class="card"><div class="card-title">Histórico de movimentações (${hist.length})</div>
+      ${UI.table(['Data/hora','Usuário','Documento','Alvo','Situação','Status'], rows)}</div>`;
+  }
+
   /* ---------------- BOLETINS ---------------- */
   function boletins(param){
     if(param==='entrada') return boletimEntrada();
@@ -498,7 +693,10 @@ window.Views = (function(){
     if(per) per.onchange=()=>{ window.__bperiodo=per.value; UI.router(); };
     const md=document.getElementById('b-modo');
     if(md) md.onchange=()=>{ window.__bmodo=md.value; UI.router(); };
-    const pr=document.getElementById('print'); if(pr) pr.onclick=()=>window.print();
+    const ms=document.getElementById('b-medsienge');
+    if(ms) ms.oninput=()=>{ window.__bmedsienge=ms.value; const w=document.querySelector('.boletim .help[style*="var(--err)"]'); if(w && ms.value.trim()) w.style.display='none'; };
+    const pr=document.getElementById('print');
+    if(pr) pr.onclick=()=>{ if(!(window.__bmedsienge||'').trim()){ UI.toast('Informe o número da medição Sienge para imprimir.'); return; } window.print(); };
   };
   function obraPicker(){
     const obras=Auth.filterObras(Store.all('obras'));
@@ -543,6 +741,7 @@ window.Views = (function(){
     const cid=window.__bcontrato; const c=cid?Store.get('contratos',cid):null;
     const periodo=window.__bperiodo||periodoAtual();
     const modo=window.__bmodo||'PERIODICO';
+    const medSienge=(window.__bmedsienge||'').trim();
     let body='<div class="card"><div class="empty">Selecione um contrato para gerar o boletim.</div></div>';
     if(c){
       const f=Store.get('fornecedores',c.fornecedorId)||{}, o=Store.get('obras',c.obraId)||{}, docs=Store.all('documentos');
@@ -569,7 +768,8 @@ window.Views = (function(){
         : 'Medição <b>periódica</b>: é liberada quando o <b>DP aprova os documentos periódicos</b> da empresa (contrato vigente). Não exige a parte de encerramento.';
       body=`<div class="boletim">
         <h2>Boletim de Medição — ${ehEnc?'Encerramento':'Periódica'}</h2>
-        <div class="bsub">${E(f.razao||'')} · Obra: ${E(o.nome||'')} · Contrato ${E(c.numero)}${ehEnc?'':' · Período '+E(periodo)+' '+(pstatus==='FECHADO'?'(fechado)':'(aberto)')} · Emitido em ${new Date().toLocaleDateString('pt-BR')}</div>
+        <div class="bsub">${E(f.razao||'')} · Obra: ${E(o.nome||'')} · Contrato ${E(c.numero)}${ehEnc?'':' · Período '+E(periodo)+' '+(pstatus==='FECHADO'?'(fechado)':'(aberto)')}${medSienge?' · Medição Sienge nº '+E(medSienge):''} · Emitido em ${new Date().toLocaleDateString('pt-BR')}</div>
+        ${medSienge?'':'<div class="help no-print" style="color:var(--err);margin-bottom:8px">⚠ Informe o <b>número da medição Sienge</b> para emitir/imprimir este boletim.</div>'}
         <div class="verdict ${m.liberado?'go':'no'}">${m.liberado?'✅ PAGAMENTO LIBERADO':'⛔ PAGAMENTO BLOQUEADO'}</div>
         <div class="help" style="margin:8px 0 14px">${regra}</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${selos}</div>
@@ -582,6 +782,7 @@ window.Views = (function(){
         <div class="field"><label>Obra</label>${obraPicker()}</div>
         <div class="field"><label>Contrato</label>${contratoPicker('b-contrato')}</div>
         <div class="field"><label>Tipo de medição</label><select id="b-modo"><option value="PERIODICO"${modo==='PERIODICO'?' selected':''}>Periódica</option><option value="ENCERRAMENTO"${modo==='ENCERRAMENTO'?' selected':''}>Encerramento</option></select></div>
+        <div class="field"><label>Medição Sienge (nº) *</label><input id="b-medsienge" value="${E(medSienge)}" placeholder="obrigatório"></div>
         <div class="field"${modo==='ENCERRAMENTO'?' style="display:none"':''}><label>Período da medição</label><input type="month" id="b-periodo" value="${periodo}"></div>
       </div></div>${body}`;
   }
@@ -679,7 +880,8 @@ window.Views = (function(){
       if(!allChk.checked) obrasVal=[].slice.call(document.querySelectorAll('.u-obra:checked')).map(x=>x.value);
       Store.upsert('usuarios',{id:u.id,nome:document.getElementById('u-nome').value.trim()||email,email,login:email,
         senha:document.getElementById('u-senha').value,perfil:document.getElementById('u-perfil').value,
-        admin:document.getElementById('u-admin').checked, obras:obrasVal});
+        admin:document.getElementById('u-admin').checked, obras:obrasVal,
+        mustChange: u.id ? !!u.mustChange : true});
       UI.close(); UI.router();
     };
   }

@@ -30,7 +30,33 @@
     const u=document.getElementById('lg-user').value.trim(), p=document.getElementById('lg-pass').value;
     const user=Store.all('usuarios').find(x=>(x.login===u || x.email===u) && x.senha===p);
     if(!user){ UI.toast('Usuário ou senha inválidos.'); return; }
+    if(user.mustChange){ renderChangePassword(user); return; }
     window.__user=user; start(user);
+  }
+  function renderChangePassword(user){
+    const el=document.getElementById('login'); el.classList.remove('hidden');
+    el.innerHTML=`
+      <div class="login-hero">
+        <div class="brand-name">AMORIM COUTINHO</div>
+        <div class="brand-sub">INCORPORAÇÃO E CONSTRUÇÃO</div>
+        <div class="slogan">O melhor do amanhã, hoje.</div>
+      </div>
+      <div class="login-box">
+        <div class="logo">${UI.LOGO(46)}<div class="txt"><span class="a">AMORIM</span> <span class="c">COUTINHO</span><small>INCORPORAÇÃO E CONSTRUÇÃO</small></div></div>
+        <h3 style="margin:0 0 4px">Primeiro acesso</h3>
+        <div class="login-hint" style="text-align:left;margin:0 0 12px">Defina uma nova senha para continuar.</div>
+        <label>Nova senha</label><input id="cp-1" type="password">
+        <label>Confirmar nova senha</label><input id="cp-2" type="password">
+        <button class="btn btn-primary" id="cp-btn">Salvar e entrar</button>
+      </div>`;
+    document.getElementById('cp-btn').onclick=()=>{
+      const a=document.getElementById('cp-1').value, b=document.getElementById('cp-2').value;
+      if(!a || a.length<4) return UI.toast('A senha deve ter ao menos 4 caracteres.');
+      if(a!==b) return UI.toast('As senhas não conferem.');
+      user.senha=a; user.mustChange=false; Store.upsert('usuarios',user);
+      window.__user=user; start(user);
+    };
+    document.getElementById('cp-2').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('cp-btn').click(); });
   }
 
   function start(user){

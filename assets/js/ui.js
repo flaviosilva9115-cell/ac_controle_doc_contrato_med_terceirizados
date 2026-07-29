@@ -19,7 +19,7 @@ window.UI = (function(){
     {r:'sienge', ic:'🔗', lbl:'Importar do Sienge', admin:true},
     {sep:'LIBERAÇÃO'},
     {r:'boletins', ic:'✅', lbl:'Boletins'},
-    {r:'periodos', ic:'📅', lbl:'Períodos'},
+    {r:'periodos', ic:'📅', lbl:'Períodos', admin:true},
     {sep:'SISTEMA', admin:true},
     {r:'config', ic:'⚙️', lbl:'Configurações', admin:true}
   ];
@@ -83,7 +83,7 @@ window.UI = (function(){
   function router(){
     const parts=(location.hash.replace(/^#\/?/,'')||'dashboard').split('/');
     const route=parts[0]||'dashboard'; const param=parts[1]||null; const sub=parts[2]||null;
-    if((route==='config'||route==='sienge') && !Auth.isAdmin()){ location.hash='#/dashboard'; return; }
+    if((route==='config'||route==='sienge'||route==='periodos') && !Auth.isAdmin()){ location.hash='#/dashboard'; return; }
     setActive(route);
     const host=document.getElementById('main-content'); if(!host) return;
     try{
